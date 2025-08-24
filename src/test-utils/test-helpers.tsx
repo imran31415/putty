@@ -1,6 +1,5 @@
 import React from 'react';
 import { render, RenderOptions } from '@testing-library/react-native';
-import { ThemeProvider } from 'react-native-elements';
 
 // Mock navigation for testing
 export const mockNavigation = {
@@ -16,28 +15,13 @@ export const mockNavigation = {
   setOptions: jest.fn(),
 };
 
-// Theme for testing
-const testTheme = {
-  colors: {
-    primary: '#2E7D32',
-    secondary: '#FFA726',
-    success: '#4CAF50',
-    warning: '#FF9800',
-    error: '#F44336',
-    text: '#212121',
-    background: '#FFFFFF',
-  },
-};
-
 // Custom render function with providers
 const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
-  return <ThemeProvider theme={testTheme}>{children}</ThemeProvider>;
+  return <>{children}</>;
 };
 
-const customRender = (
-  ui: React.ReactElement,
-  options?: Omit<RenderOptions, 'wrapper'>
-) => render(ui, { wrapper: AllTheProviders, ...options });
+const customRender = (ui: React.ReactElement, options?: Omit<RenderOptions, 'wrapper'>) =>
+  render(ui, { wrapper: AllTheProviders, ...options });
 
 // Test data generators
 export const generatePuttData = (overrides = {}) => ({
