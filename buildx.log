@@ -1,0 +1,153 @@
+#0 building with "multiarch" instance using docker-container driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 681B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 0.7s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.8s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 ...
+
+#6 [builder 1/7] FROM docker.io/library/node:20-alpine@sha256:df02558528d3d3d0d621f112e232611aecfee7cbc654f6b375765f72bb262799
+#6 resolve docker.io/library/node:20-alpine@sha256:df02558528d3d3d0d621f112e232611aecfee7cbc654f6b375765f72bb262799 0.0s done
+#6 DONE 0.0s
+
+#7 [production 1/3] FROM docker.io/library/nginx:alpine@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8
+#7 resolve docker.io/library/nginx:alpine@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8 0.0s done
+#7 CACHED
+
+#5 [internal] load build context
+#5 transferring context: 4.96MB 2.8s done
+#5 DONE 3.1s
+
+#8 [builder 2/7] WORKDIR /app
+#8 CACHED
+
+#9 [builder 3/7] COPY package*.json ./
+#9 CACHED
+
+#10 [builder 4/7] COPY yarn.lock ./
+#10 CACHED
+
+#11 [builder 5/7] RUN yarn install --frozen-lockfile
+#11 1.481 yarn install v1.22.22
+#11 1.869 [1/4] Resolving packages...
+#11 3.283 [2/4] Fetching packages...
+#11 52.05 [3/4] Linking dependencies...
+#11 52.06 warning "leva > @radix-ui/react-portal@1.0.2" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-portal@1.0.2" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip@1.0.5" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip@1.0.5" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-portal > @radix-ui/react-primitive@1.0.2" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-portal > @radix-ui/react-primitive@1.0.2" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-compose-refs@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-context@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-dismissable-layer@1.0.3" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-dismissable-layer@1.0.3" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-id@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper@1.1.1" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper@1.1.1" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-presence@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-presence@1.0.0" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-slot@1.0.1" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-use-controllable-state@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-visually-hidden@1.0.2" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-visually-hidden@1.0.2" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-dismissable-layer > @radix-ui/react-use-callback-ref@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-dismissable-layer > @radix-ui/react-use-escape-keydown@1.0.2" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-id > @radix-ui/react-use-layout-effect@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper > @radix-ui/react-arrow@1.0.2" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper > @radix-ui/react-arrow@1.0.2" has incorrect peer dependency "react-dom@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper > @radix-ui/react-use-rect@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.06 warning "leva > @radix-ui/react-tooltip > @radix-ui/react-popper > @radix-ui/react-use-size@1.0.0" has incorrect peer dependency "react@^16.8 || ^17.0 || ^18.0".
+#11 52.07 warning "react-spring > @react-spring/konva@10.0.1" has unmet peer dependency "konva@>=2.6".
+#11 52.07 warning "react-spring > @react-spring/konva@10.0.1" has unmet peer dependency "react-konva@^19".
+#11 52.07 warning "react-spring > @react-spring/zdog@10.0.1" has incorrect peer dependency "react@^16.8.0 || ^17.0.0 || ^18.0.0".
+#11 52.07 warning "react-spring > @react-spring/zdog@10.0.1" has incorrect peer dependency "react-dom@^16.8.0 || ^17.0.0 || ^18.0.0".
+#11 52.07 warning "react-spring > @react-spring/zdog@10.0.1" has unmet peer dependency "react-zdog@>=1.0".
+#11 52.07 warning "react-spring > @react-spring/zdog@10.0.1" has unmet peer dependency "zdog@>=1.0".
+#11 52.08 warning "detox > @wix-pilot/detox@1.0.13" has unmet peer dependency "expect@29.x.x || 28.x.x || ^27.2.5".
+#11 52.08 warning "jest-expo > jest-watch-typeahead@2.2.1" has incorrect peer dependency "jest@^27.0.0 || ^28.0.0 || ^29.0.0".
+#11 52.08 warning "jest-expo > react-server-dom-webpack@19.0.0" has unmet peer dependency "webpack@^5.59.0".
+#11 73.96 [4/4] Building fresh packages...
+#11 75.52 Done in 74.07s.
+#11 DONE 77.9s
+
+#12 [builder 6/7] COPY . ./
+#12 DONE 142.6s
+
+#13 [builder 7/7] RUN yarn build:web
+#13 5.117 yarn run v1.22.22
+#13 5.381 $ expo export -p web
+#13 11.49 Starting Metro Bundler
+#13 49.13 Web ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+#13 51.91 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 52.64 Web ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+#13 54.96 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 55.03 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 56.65 Web ./index.ts ░░░░░░░░░░░░░░░░  4.0% (2/4)
+#13 60.25 Web ./index.ts ▓▓▓░░░░░░░░░░░░░ 22.1% (13/49)
+#13 61.15 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 61.19 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 61.25 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 61.57 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 63.74 Web ./index.ts ▓▓▓░░░░░░░░░░░░░ 22.1% (32/86)
+#13 67.23 Web ./index.ts ▓▓▓▓▓░░░░░░░░░░░ 32.7% ( 57/100)
+#13 70.73 Web ./index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 54.4% ( 90/122)
+#13 74.24 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 78.6% (142/163)
+#13 77.79 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.8% (182/185)
+#13 82.23 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.8% (196/200)
+#13 87.31 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.8% (197/200)
+#13 97.82 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.0% (198/200)
+#13 101.5 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.0% (199/200)
+#13 105.0 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (202/203)
+#13 131.9 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (203/203)
+#13 132.8 Web Bundled 83721ms index.ts (203 modules)
+#13 133.2 
+#13 133.3 › web bundles (1):
+#13 133.3 _expo/static/js/web/index-2ec0f0d8706ae6b9028423189b45fd70.js (1.29 MB)
+#13 133.3 
+#13 133.3 › Files (3):
+#13 133.3 favicon.ico (14.5 kB)
+#13 133.3 index.html (1.22 kB)
+#13 133.3 metadata.json (49 B)
+#13 133.4 
+#13 133.4 Exported: dist
+#13 137.2 Done in 132.14s.
+#13 DONE 140.0s
+
+#14 [production 2/3] COPY --from=builder /app/dist /usr/share/nginx/html
+#14 DONE 0.2s
+
+#15 [production 3/3] COPY nginx.conf /etc/nginx/nginx.conf
+#15 DONE 0.1s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 0.2s done
+#16 exporting manifest sha256:6b7928b72bd131b2a410f307c56940e725aa35d36cd4a3315d5195477e95f669 done
+#16 exporting config sha256:61e972c15b3150478fb2d18417e2aa88b39c92cab398630a053fa7406e65185a 0.0s done
+#16 exporting attestation manifest sha256:e98930755c03304be7b6fbf14498506cd20f3a0578ad58afc798cb016e3b6ebe 0.0s done
+#16 exporting manifest list sha256:2e89447ac12bd2bd7a36896f9aa7d1758ac4af9937247786a128ff3e7b1ff15f done
+#16 pushing layers
+#16 ...
+
+#17 [auth] resourceloop/putty-frontend:pull,push token for registry.digitalocean.com
+#17 DONE 0.0s
+
+#16 exporting to image
+#16 pushing layers 4.4s done
+#16 pushing manifest for registry.digitalocean.com/resourceloop/putty-frontend:v1.0.0@sha256:2e89447ac12bd2bd7a36896f9aa7d1758ac4af9937247786a128ff3e7b1ff15f
+#16 pushing manifest for registry.digitalocean.com/resourceloop/putty-frontend:v1.0.0@sha256:2e89447ac12bd2bd7a36896f9aa7d1758ac4af9937247786a128ff3e7b1ff15f 4.3s done
+#16 DONE 9.0s
+
+View build details: docker-desktop://dashboard/build/multiarch/multiarch0/i12lr9apdp64k4dem725q5q10

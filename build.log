@@ -1,0 +1,89 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 681B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.7s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B 0.0s done
+#4 DONE 0.1s
+
+#5 [builder 1/7] FROM docker.io/library/node:20-alpine@sha256:df02558528d3d3d0d621f112e232611aecfee7cbc654f6b375765f72bb262799
+#5 DONE 0.0s
+
+#6 [production 1/3] FROM docker.io/library/nginx:alpine
+#6 CACHED
+
+#7 [internal] load build context
+#7 transferring context: 4.96MB 3.2s done
+#7 DONE 3.7s
+
+#8 [builder 4/7] COPY yarn.lock ./
+#8 CACHED
+
+#9 [builder 2/7] WORKDIR /app
+#9 CACHED
+
+#10 [builder 3/7] COPY package*.json ./
+#10 CACHED
+
+#11 [builder 5/7] RUN yarn install --frozen-lockfile
+#11 CACHED
+
+#12 [builder 6/7] COPY . ./
+#12 DONE 60.5s
+
+#13 [builder 7/7] RUN yarn build:web
+#13 1.144 yarn run v1.22.22
+#13 1.172 $ expo export -p web
+#13 3.411 Starting Metro Bundler
+#13 34.26 Web ./index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+#13 35.74 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 37.25 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 37.28 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 37.77 Web ./index.ts ▓░░░░░░░░░░░░░░░  9.0% (3/4)
+#13 39.06 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 39.11 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 39.15 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 39.20 | [Reanimated] Seems like you are using a Babel plugin `react-native-reanimated/plugin`. It was moved to `react-native-worklets` package. Please use `react-native-worklets/plugin` instead.
+#13 41.29 Web ./index.ts ▓▓▓░░░░░░░░░░░░░ 22.1% (25/76)
+#13 44.83 Web ./index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 58.5% (104/136)
+#13 48.39 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.0% (196/200)
+#13 52.84 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.0% (197/200)
+#13 52.97 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.0% (198/200)
+#13 56.49 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.0% (202/203)
+#13 69.36 Web ./index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (203/203)
+#13 70.10 Web Bundled 35852ms index.ts (203 modules)
+#13 70.48 
+#13 70.62 › web bundles (1):
+#13 70.62 _expo/static/js/web/index-2ec0f0d8706ae6b9028423189b45fd70.js (1.29 MB)
+#13 70.62 
+#13 70.62 › Files (3):
+#13 70.62 favicon.ico (14.5 kB)
+#13 70.62 index.html (1.22 kB)
+#13 70.62 metadata.json (49 B)
+#13 70.68 
+#13 70.69 Exported: dist
+#13 74.37 Done in 73.23s.
+#13 DONE 77.4s
+
+#14 [production 2/3] COPY --from=builder /app/dist /usr/share/nginx/html
+#14 DONE 0.1s
+
+#15 [production 3/3] COPY nginx.conf /etc/nginx/nginx.conf
+#15 DONE 0.0s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 0.0s done
+#16 writing image sha256:bf33a579c5f8a2d0ac22ad6bfbd01b4fa1a6d1fdc7a1c2c150f4ce4d1f1d8a7c done
+#16 naming to registry.digitalocean.com/resourceloop/putty-frontend:v1.0.0 done
+#16 DONE 0.1s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/11u9njism6qazz8sky68qb8xw
