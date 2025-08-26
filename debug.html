@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Putty</title>
+</head>
+<body>
+    <div id="test">
+        <h1>Direct HTML Test</h1>
+        <p>This should always show. If you don't see the Putty app below, there's a React/bundling issue.</p>
+    </div>
+    
+    <script>
+        // Test if we can reach the bundle
+        fetch('/index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable')
+            .then(response => {
+                if (response.ok) {
+                    console.log('Bundle fetch successful');
+                    return response.text();
+                } else {
+                    console.error('Bundle fetch failed:', response.status);
+                }
+            })
+            .then(bundleCode => {
+                if (bundleCode && bundleCode.length > 1000) {
+                    console.log('Bundle loaded successfully, length:', bundleCode.length);
+                } else {
+                    console.error('Bundle too small or empty');
+                }
+            })
+            .catch(err => console.error('Bundle fetch error:', err));
+    </script>
+</body>
+</html>

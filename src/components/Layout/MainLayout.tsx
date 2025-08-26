@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Dimensions, SafeAreaView, ScrollView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import HeaderBar from './HeaderBar';
-import Fixed3DView from '../Visualization/Fixed3DView';
+import ExpoGL3DView from '../PuttingCoach/ExpoGL3DView';
 import PuttDashboard from '../Dashboard/PuttDashboard';
 import { COLORS } from '../../constants';
 import type { PuttData } from '../../types';
@@ -20,8 +20,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ puttData, onPuttDataChange }) =
   // Calculate responsive heights to maximize 3D view space
   const headerHeight = 40;
   // Significantly increase 3D view space, minimize reserved space for controls
-  const minVisualizationHeight = isMobile 
-    ? Math.max(screenHeight * 0.80, 500) // Mobile: 80% of screen or 500px minimum
+  const minVisualizationHeight = isMobile
+    ? Math.max(screenHeight * 0.8, 500) // Mobile: 80% of screen or 500px minimum
     : Math.max(screenHeight * 0.85, 600); // Desktop: 85% of screen or 600px minimum
   const visualizationHeight = isMobile
     ? Math.max(minVisualizationHeight, screenHeight - headerHeight - 120) // Mobile: minimal space for controls (120px)
@@ -30,8 +30,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ puttData, onPuttDataChange }) =
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" backgroundColor={COLORS.BACKGROUND} />
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={true}
@@ -44,12 +44,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ puttData, onPuttDataChange }) =
 
         {/* 3D Visualization */}
         <View style={[styles.visualization, { height: visualizationHeight }]}>
-          <Fixed3DView puttData={puttData} onPuttDataChange={onPuttDataChange} />
+          {/* TODO: Integrate ExpoGL3DView with proper props mapping */}
+          <View style={styles.placeholder3D}>
+            {/* <ExpoGL3DView puttingData={puttData} isPutting={false} showTrajectory={false} onPuttComplete={() => {}} /> */}
+          </View>
         </View>
 
         {/* Dashboard - Hidden for web, integrated into 3D controls */}
         {false && (
-          <View style={[styles.dashboard, { height: dashboardHeight }]}>
+          <View style={[styles.dashboard, { height: 120 }]}>
             <PuttDashboard puttData={puttData} onPuttDataChange={onPuttDataChange} />
           </View>
         )}
@@ -92,6 +95,12 @@ const styles = StyleSheet.create({
     borderTopColor: '#E0E0E0',
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  placeholder3D: {
+    flex: 1,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
