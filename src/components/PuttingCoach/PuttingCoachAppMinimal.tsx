@@ -383,71 +383,47 @@ export default function PuttingCoachAppMinimal() {
           </TouchableOpacity>
         </View>
         
-        {/* Game Mode Quick Controls - To the right of PUTT button */}
+        {/* Compact Mobile Challenge Controls */}
         {isChallengMode && (
-          <View style={styles.gameModeControls}>
-            {/* Power Control */}
-            <View style={styles.gameModeControlItem}>
-              <Text style={styles.gameModeLabel}>Power</Text>
-              <View style={styles.gameModeButtonRow}>
-                <TouchableOpacity
-                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
-                  onPress={() => handleDistanceChange(-12)}
-                >
-                  <Text style={styles.gameModeButtonText}>−−</Text>
+          <View style={styles.mobileGameControls}>
+            {/* Compact Power */}
+            <View style={styles.mobileControlGroup}>
+              <Text style={styles.mobileControlLabel}>Pwr</Text>
+              <View style={styles.mobileButtonRow}>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-12)}>
+                  <Text style={styles.mobileControlButtonText}>--</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.gameModeButton}
-                  onPress={() => handleDistanceChange(-1)}
-                >
-                  <Text style={styles.gameModeButtonText}>−</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-1)}>
+                  <Text style={styles.mobileControlButtonText}>-</Text>
                 </TouchableOpacity>
-                <Text style={styles.gameModeValue}>{distance.toFixed(1)}ft</Text>
-                <TouchableOpacity
-                  style={styles.gameModeButton}
-                  onPress={() => handleDistanceChange(1)}
-                >
-                  <Text style={styles.gameModeButtonText}>+</Text>
+                <Text style={styles.mobileControlValue}>{distance.toFixed(0)}ft</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(1)}>
+                  <Text style={styles.mobileControlButtonText}>+</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
-                  onPress={() => handleDistanceChange(12)}
-                >
-                  <Text style={styles.gameModeButtonText}>++</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(12)}>
+                  <Text style={styles.mobileControlButtonText}>++</Text>
                 </TouchableOpacity>
               </View>
             </View>
             
-            {/* Aim Control */}
-            <View style={styles.gameModeControlItem}>
-              <Text style={styles.gameModeLabel}>Aim</Text>
-              <View style={styles.gameModeButtonRow}>
-                <TouchableOpacity
-                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
-                  onPress={() => handleAimChange(-1)}
-                >
-                  <Text style={styles.gameModeButtonText}>←←</Text>
+            {/* Compact Aim */}
+            <View style={styles.mobileControlGroup}>
+              <Text style={styles.mobileControlLabel}>Aim</Text>
+              <View style={styles.mobileButtonRow}>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-1)}>
+                  <Text style={styles.mobileControlButtonText}>LL</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.gameModeButton}
-                  onPress={() => handleAimChange(-0.25)}
-                >
-                  <Text style={styles.gameModeButtonText}>←</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-0.25)}>
+                  <Text style={styles.mobileControlButtonText}>L</Text>
                 </TouchableOpacity>
-                <Text style={styles.gameModeValue}>
-                  {aimAngle === 0 ? 'Center' : `${aimAngle.toFixed(1)}°`}
+                <Text style={styles.mobileControlValue}>
+                  {aimAngle === 0 ? 'C' : aimAngle > 0 ? `R${aimAngle.toFixed(1)}` : `L${Math.abs(aimAngle).toFixed(1)}`}
                 </Text>
-                <TouchableOpacity
-                  style={styles.gameModeButton}
-                  onPress={() => handleAimChange(0.25)}
-                >
-                  <Text style={styles.gameModeButtonText}>→</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(0.25)}>
+                  <Text style={styles.mobileControlButtonText}>R</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
-                  onPress={() => handleAimChange(1)}
-                >
-                  <Text style={styles.gameModeButtonText}>→→</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(1)}>
+                  <Text style={styles.mobileControlButtonText}>RR</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -506,14 +482,7 @@ export default function PuttingCoachAppMinimal() {
             </View>
           </View>
           
-          {/* Bank Balance - Always visible */}
-          <View style={[styles.dashboardItem, styles.bankItem]}>
-            <Text style={styles.dashboardIcon}>💰</Text>
-            <View style={styles.dashboardTextContainer}>
-              <Text style={[styles.dashboardValue, styles.bankValue]}>${userSession.bankBalance}</Text>
-              <Text style={styles.dashboardLabel}>Bank</Text>
-            </View>
-          </View>
+          {/* Bank removed - now in settings */}
         </View>
 
         {/* Stats Display */}
@@ -549,28 +518,22 @@ export default function PuttingCoachAppMinimal() {
           </TouchableWithoutFeedback>
         )}
         
-        {/* Challenge Mode Display */}
+        {/* Compact Mobile Challenge Header */}
         {isChallengMode && currentLevel !== null && (
-          <View style={styles.challengeOverlay}>
+          <View style={styles.mobileChallengeHeader}>
+            <Text style={styles.mobileChallengeTitle}>
+              L{currentLevel}: {currentLevel === 1 ? 'Slope' : 'Masters'} | {challengeAttempts} attempts
+            </Text>
             <TouchableOpacity
-              style={styles.exitChallengeButton}
+              style={styles.mobileExitButton}
               onPress={() => {
                 setIsChallengMode(false);
                 setCurrentLevel(null);
                 setChallengeComplete(false);
               }}
             >
-              <Text style={styles.exitChallengeText}>Exit Challenge</Text>
+              <Text style={styles.mobileExitText}>Exit</Text>
             </TouchableOpacity>
-            <Text style={styles.challengeTitle}>
-              Level {currentLevel}: {currentLevel === 1 ? 'Slope Master' : "Tiger's Masters"}
-            </Text>
-            <Text style={styles.challengeDesc}>
-              {currentLevel === 1 
-                ? 'Short putt with heavy slope - adjust your aim!' 
-                : '43ft downhill - lightning fast!'}
-            </Text>
-            <Text style={styles.challengeAttempts}>Attempts: {challengeAttempts}</Text>
             {challengeComplete && (
               <View style={styles.challengeSuccess}>
                 <Text style={styles.challengeSuccessText}>🎉 LEVEL COMPLETE! 🎉</Text>
@@ -1030,6 +993,16 @@ export default function PuttingCoachAppMinimal() {
                         Reset All
                       </Text>
                     </TouchableOpacity>
+                  </View>
+                </View>
+                
+                {/* Bank Balance Section */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>💰 Bank Balance</Text>
+                  <View style={styles.bankDetailsContainer}>
+                    <Text style={styles.bankBalanceText}>${userSession.bankBalance}</Text>
+                    <Text style={styles.bankSubText}>Total Earnings: ${userSession.totalEarnings}</Text>
+                    <Text style={styles.bankSubText}>Current Streak: {userSession.currentStreak}</Text>
                   </View>
                 </View>
               </View>
@@ -1909,5 +1882,100 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
     fontWeight: '600',
+  },
+  // Mobile-specific styles
+  mobileGameControls: {
+    position: 'absolute',
+    bottom: 100, // Above putt button (which is at bottom: 20)
+    right: 10,
+    flexDirection: 'column',
+    gap: 4,
+    zIndex: 10, // Ensure they're above other elements
+  },
+  mobileControlGroup: {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 8,
+    padding: 6,
+    alignItems: 'center',
+    minWidth: 150,
+  },
+  mobileControlLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 3,
+  },
+  mobileButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  mobileControlButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  mobileControlButtonText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  mobileControlValue: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    minWidth: 30,
+    textAlign: 'center',
+    marginHorizontal: 3,
+  },
+  mobileChallengeHeader: {
+    position: 'absolute',
+    top: 80,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 8,
+    padding: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mobileChallengeTitle: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  mobileExitButton: {
+    backgroundColor: '#ff4444',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  mobileExitText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  bankDetailsContainer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 5,
+  },
+  bankBalanceText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 5,
+  },
+  bankSubText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
   },
 });
