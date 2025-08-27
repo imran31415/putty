@@ -2938,7 +2938,7 @@ export default function ExpoGL3DView({
           const distanceToFlagstick = Math.sqrt(currentPos.x * currentPos.x + (currentPos.z - currentHolePos.z) * (currentPos.z - currentHolePos.z));
           
           if (distanceToFlagstick <= flagstickRadius && currentSpeed > 0.8) {
-            // Ball hit the flag at high speed - bounce out!
+            // Ball hit the flag at high speed - quick bounce out!
             // Deflect the ball away
             const bounceDirection = new THREE.Vector3(
               currentPos.x > 0 ? 1 : -1,
@@ -2946,11 +2946,11 @@ export default function ExpoGL3DView({
               1
             ).normalize();
             
-            // Add bounce trajectory
-            for (let i = 1; i <= 10; i++) {
+            // Add shorter bounce trajectory (reduced from 10 to 4 steps)
+            for (let i = 1; i <= 4; i++) {
               const bouncePos = currentPos.clone();
-              bouncePos.x += bounceDirection.x * i * 0.05;
-              bouncePos.z += bounceDirection.z * i * 0.05;
+              bouncePos.x += bounceDirection.x * i * 0.03; // Reduced from 0.05
+              bouncePos.z += bounceDirection.z * i * 0.03;
               trajectory.push(bouncePos);
             }
             
@@ -2963,7 +2963,7 @@ export default function ExpoGL3DView({
           // Lip-out detection - ball is on edge and going fast
           const isOnLipEdge = distanceToHole > 0.08 && distanceToHole <= 0.15; // On the edge of hole
           if (isOnLipEdge && currentSpeed > 0.5) {
-            // Ball lips out!
+            // Ball lips out! Quick deflection
             // Calculate lip-out direction (perpendicular to hole entry)
             const lipOutDirection = new THREE.Vector3(
               currentPos.x - currentHolePos.x,
@@ -2971,12 +2971,12 @@ export default function ExpoGL3DView({
               currentPos.z - currentHolePos.z
             ).normalize();
             
-            // Add lip-out trajectory
-            for (let i = 1; i <= 15; i++) {
+            // Add shorter lip-out trajectory (reduced from 15 to 6 steps)
+            for (let i = 1; i <= 6; i++) {
               const lipPos = currentPos.clone();
-              const decay = Math.exp(-i * 0.1); // Exponential decay
-              lipPos.x += lipOutDirection.x * i * 0.03 * decay;
-              lipPos.z += lipOutDirection.z * i * 0.03 * decay;
+              const decay = Math.exp(-i * 0.15); // Faster decay
+              lipPos.x += lipOutDirection.x * i * 0.02 * decay; // Reduced from 0.03
+              lipPos.z += lipOutDirection.z * i * 0.02 * decay;
               trajectory.push(lipPos);
             }
             
