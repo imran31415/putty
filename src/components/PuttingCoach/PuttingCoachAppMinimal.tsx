@@ -13,6 +13,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import ExpoGL3DView from './ExpoGL3DView';
 import { PuttingPhysics, PuttingResult } from './PuttingPhysics';
+import { getCloseMessage } from '../../utils/messageHelpers';
 
 interface PuttingStats {
   attempts: number;
@@ -369,6 +370,7 @@ export default function PuttingCoachAppMinimal() {
           showTrajectory={showTrajectory}
           showAimLine={showAimLine}
           currentLevel={currentLevel}
+          challengeAttempts={challengeAttempts}
         />
 
         {/* Floating PUTT Button - Repositioned */}
@@ -536,7 +538,7 @@ export default function PuttingCoachAppMinimal() {
             </TouchableOpacity>
             {challengeComplete && (
               <View style={styles.challengeSuccess}>
-                <Text style={styles.challengeSuccessText}>🎉 LEVEL COMPLETE! 🎉</Text>
+                <Text style={styles.challengeSuccessText}>🎉 Complete!</Text>
                 <View style={styles.challengeButtonRow}>
                   <TouchableOpacity 
                     style={styles.challengeNextButton}
@@ -679,7 +681,7 @@ export default function PuttingCoachAppMinimal() {
         {lastResult && (
           <View style={[styles.resultPopup, lastResult.success && styles.successPopup]}>
             <Text style={styles.resultText}>
-              {lastResult.success ? '🎉 HOLE!' : `${Math.round(lastResult.accuracy)}% Close`}
+              {lastResult.success ? '🎉 HOLE!' : getCloseMessage(lastResult.accuracy)}
             </Text>
           </View>
         )}
@@ -1226,12 +1228,12 @@ const styles = StyleSheet.create({
   },
   resultPopup: {
     position: 'absolute',
-    top: '40%',
-    left: '20%',
-    right: '20%',
+    top: '45%',
+    left: '25%',
+    right: '25%',
     backgroundColor: 'rgba(255, 152, 0, 0.95)',
-    padding: 20,
-    borderRadius: 20,
+    padding: 12,
+    borderRadius: 16,
     alignItems: 'center',
   },
   successPopup: {
@@ -1239,7 +1241,7 @@ const styles = StyleSheet.create({
   },
   resultText: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   controlsPanel: {
@@ -1695,25 +1697,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   challengeSuccess: {
-    marginTop: 20,
+    marginTop: 10,
     alignItems: 'center',
   },
   challengeSuccessText: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#4CAF50',
-    marginBottom: 15,
+    marginBottom: 8,
   },
   challengeButtonRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
+    gap: 8,
+    marginTop: 5,
   },
   challengeNextButton: {
     backgroundColor: '#4CAF50',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 15,
     flex: 1,
   },
   challengeBackButton: {
@@ -1722,7 +1724,7 @@ const styles = StyleSheet.create({
   },
   challengeNextText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
   },

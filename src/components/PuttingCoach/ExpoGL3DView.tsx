@@ -12,6 +12,10 @@ import { GLView } from 'expo-gl';
 import { Renderer, TextureLoader } from 'expo-three';
 import * as THREE from 'three';
 import { PuttingResult } from './PuttingPhysics';
+import { 
+  getChallengeModeSpectatorConfig, 
+  getPracticeModeSpectatorConfig 
+} from '../../utils/sceneRandomizer';
 
 interface PuttingData {
   distance: number;
@@ -30,6 +34,7 @@ interface ExpoGL3DViewProps {
   showAimLine: boolean;
   onPuttComplete: (result: PuttingResult) => void;
   currentLevel?: number | null;
+  challengeAttempts?: number;
 }
 
 export default function ExpoGL3DView({
@@ -39,6 +44,7 @@ export default function ExpoGL3DView({
   showAimLine,
   onPuttComplete,
   currentLevel = null,
+  challengeAttempts = 0,
 }: ExpoGL3DViewProps) {
   const rendererRef = useRef<Renderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -1165,26 +1171,23 @@ export default function ExpoGL3DView({
       
       createFlagShadow();
 
-      // Determine which robots to show based on level (add variety)
-      const levelConfig = currentLevel ? {
-        showFemaleRobot: currentLevel % 2 === 1 || currentLevel === 2, // Levels 1, 2, 3, 5
-        showPuttingRobot: currentLevel !== 4 && currentLevel !== 6, // Not in levels 4, 6
-        showCooler: currentLevel >= 3, // Levels 3+
-        femaleRobotOffset: {
-          x: currentLevel === 1 ? 2.0 : currentLevel === 3 ? 2.5 : currentLevel === 5 ? 1.5 : 2.0,
-          z: currentLevel === 1 ? -0.5 : currentLevel === 3 ? -1.0 : currentLevel === 5 ? 0 : -0.5
-        },
-        puttingRobotOffset: {
-          x: currentLevel === 2 ? -2.5 : currentLevel === 3 ? -1.5 : -2.0,
-          z: currentLevel === 2 ? -1.5 : currentLevel === 3 ? -0.5 : -1.0
-        }
-      } : {
-        // Default config for practice mode
-        showFemaleRobot: true,
-        showPuttingRobot: true,
-        showCooler: true,
-        femaleRobotOffset: { x: 2.0, z: -0.5 },
-        puttingRobotOffset: { x: -2.0, z: -1.0 }
+      // Use randomized spectator configuration
+      const spectatorConfig = currentLevel 
+        ? getChallengeModeSpectatorConfig(
+            currentLevel, 
+            holeDistanceFeet,
+            challengeAttempts || 0
+          )
+        : getPracticeModeSpectatorConfig();
+      
+      // Create level config from spectator config
+      const levelConfig = {
+        showFemaleRobot: spectatorConfig.showFemaleRobot,
+        showPuttingRobot: spectatorConfig.showPuttingRobot,
+        showCooler: spectatorConfig.showCooler,
+        femaleRobotOffset: spectatorConfig.femaleRobotPosition || { x: 2.0, z: -0.5 },
+        puttingRobotOffset: spectatorConfig.puttingRobotPosition || { x: -2.0, z: -1.0 },
+        coolerOffset: spectatorConfig.coolerPosition || { x: 3.5, z: -2.5 }
       };
 
       // Create 2D/pseudo-3D humanoid robot avatar for distance reference
@@ -1895,8 +1898,8 @@ export default function ExpoGL3DView({
         });
         
         const cooler = new THREE.Sprite(coolerMaterial);
-        const coolerOffsetX = 3.5; // Right side of scene
-        const coolerOffsetZ = -2.5; // Back area
+        const coolerOffsetX = levelConfig.coolerOffset?.x || 3.5; // Use randomized position
+        const coolerOffsetZ = levelConfig.coolerOffset?.z || -2.5; // Use randomized position
         
         cooler.position.set(
           holePos.x + coolerOffsetX,
