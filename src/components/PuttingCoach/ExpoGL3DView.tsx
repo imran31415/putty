@@ -2933,63 +2933,52 @@ export default function ExpoGL3DView({
           const currentSpeed = currentStep > 0 ? 
             trajectory[currentStep].distanceTo(trajectory[currentStep - 1]) / 0.05 : 0;
           
-          // Flag collision - if ball is going too fast and hits the center
-          const flagstickRadius = 0.02; // Flagstick radius
-          const distanceToFlagstick = Math.sqrt(currentPos.x * currentPos.x + (currentPos.z - currentHolePos.z) * (currentPos.z - currentHolePos.z));
-          
-          if (distanceToFlagstick <= flagstickRadius && currentSpeed > 0.8) {
-            // Ball hit the flag at high speed - quick bounce out!
-            // Deflect the ball away
-            const bounceDirection = new THREE.Vector3(
-              currentPos.x > 0 ? 1 : -1,
-              0,
-              1
-            ).normalize();
-            
-            // Add shorter bounce trajectory (reduced from 10 to 4 steps)
-            for (let i = 1; i <= 4; i++) {
-              const bouncePos = currentPos.clone();
-              bouncePos.x += bounceDirection.x * i * 0.03; // Reduced from 0.05
-              bouncePos.z += bounceDirection.z * i * 0.03;
-              trajectory.push(bouncePos);
-            }
-            
-            // Continue animation to show bounce
-            currentStep++;
-            requestAnimationFrame(animateBall);
-            return;
-          }
-          
-          // Lip-out detection - ball is on edge and going fast
-          const isOnLipEdge = distanceToHole > 0.08 && distanceToHole <= 0.15; // On the edge of hole
-          if (isOnLipEdge && currentSpeed > 0.5) {
-            // Ball lips out! Quick deflection
-            // Calculate lip-out direction (perpendicular to hole entry)
-            const lipOutDirection = new THREE.Vector3(
+          // Check for near miss rim-out (only if ball is close but not going in)
+          if (distanceToHole > 0.15 && distanceToHole <= 0.25 && currentSpeed > 0.4) {
+            // Ball rims out - it was close but too fast or off-center
+            const rimOutDirection = new THREE.Vector3(
               currentPos.x - currentHolePos.x,
               0,
               currentPos.z - currentHolePos.z
             ).normalize();
             
-            // Add shorter lip-out trajectory (reduced from 15 to 6 steps)
+            // Add rim-out animation (ball deflects away from hole)
             for (let i = 1; i <= 6; i++) {
-              const lipPos = currentPos.clone();
-              const decay = Math.exp(-i * 0.15); // Faster decay
-              lipPos.x += lipOutDirection.x * i * 0.02 * decay; // Reduced from 0.03
-              lipPos.z += lipOutDirection.z * i * 0.02 * decay;
-              trajectory.push(lipPos);
+              const rimPos = currentPos.clone();
+              const decay = Math.exp(-i * 0.2);
+              rimPos.x += rimOutDirection.x * i * 0.02 * decay;
+              rimPos.z += rimOutDirection.z * i * 0.02 * decay;
+              trajectory.push(rimPos);
             }
             
-            // Continue animation to show lip-out
+            // Continue animation to show rim-out
             currentStep++;
             requestAnimationFrame(animateBall);
             return;
           }
           
-          // Only count as success if ball is very close to hole center and going slow enough
-          if (distanceToHole <= 0.12 && currentSpeed < 0.8) {
-            // Ball goes in hole - make it disappear
-            ballRef.current.visible = false;
+          // Simple hole detection - if ball is close enough to hole, it goes in!
+          if (distanceToHole <= 0.15) {
+            // Ball goes in hole - animate it dropping into the hole
+            // Create a simple drop animation
+            const dropSteps = 10;
+            for (let i = 1; i <= dropSteps; i++) {
+              const dropPos = currentPos.clone();
+              // Move ball towards hole center
+              const t = i / dropSteps;
+              dropPos.x = currentPos.x * (1 - t) + currentHolePos.x * t;
+              dropPos.z = currentPos.z * (1 - t) + currentHolePos.z * t;
+              // Drop the ball down into the hole
+              dropPos.y = Math.max(0, currentPos.y - (i * 0.015));
+              trajectory.push(dropPos);
+            }
+            
+            // After drop animation, make ball disappear
+            setTimeout(() => {
+              if (ballRef.current) {
+                ballRef.current.visible = false;
+              }
+            }, dropSteps * 50); // Match animation timing
 
             // Complete animation immediately
             setIsAnimating(false);
