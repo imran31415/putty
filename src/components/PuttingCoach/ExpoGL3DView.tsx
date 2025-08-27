@@ -1162,6 +1162,1089 @@ export default function ExpoGL3DView({
       
       createFlagShadow();
 
+      // Create 2D/pseudo-3D humanoid robot avatar for distance reference
+      const createRobotAvatar = () => {
+        // Create female robot with cute golf outfit
+        const createRobotTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 128;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          
+          // Clear background (transparent)
+          ctx.clearRect(0, 0, 128, 256);
+          
+          // Female robot color scheme
+          const primaryColor = '#ff69b4'; // Pink
+          const secondaryColor = '#ff1493'; // Deep pink accents
+          const skinColor = '#fdbcb4'; // Light peach
+          const outfitColor = '#fff'; // White outfit
+          const skirtColor = '#ff69b4'; // Pink skirt
+          
+          // Long hair (back layer)
+          ctx.fillStyle = '#8b4513'; // Brown hair
+          // Left side hair
+          ctx.beginPath();
+          ctx.moveTo(40, 30);
+          ctx.quadraticCurveTo(35, 50, 38, 75);
+          ctx.quadraticCurveTo(40, 85, 45, 90);
+          ctx.lineTo(50, 70);
+          ctx.lineTo(48, 35);
+          ctx.closePath();
+          ctx.fill();
+          // Right side hair
+          ctx.beginPath();
+          ctx.moveTo(88, 30);
+          ctx.quadraticCurveTo(93, 50, 90, 75);
+          ctx.quadraticCurveTo(88, 85, 83, 90);
+          ctx.lineTo(78, 70);
+          ctx.lineTo(80, 35);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Head (rounded, feminine)
+          ctx.fillStyle = skinColor;
+          ctx.beginPath();
+          ctx.arc(64, 45, 23, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#f0a0a0';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          // Hair on top
+          ctx.fillStyle = '#8b4513';
+          ctx.beginPath();
+          ctx.ellipse(64, 28, 24, 12, 0, Math.PI, Math.PI * 2);
+          ctx.fill();
+          
+          // Golf visor
+          ctx.fillStyle = skirtColor; // Pink visor
+          ctx.beginPath();
+          ctx.ellipse(64, 32, 28, 8, 0, Math.PI, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ff1493';
+          ctx.stroke();
+          // Visor brim
+          ctx.fillStyle = '#ff85c8';
+          ctx.beginPath();
+          ctx.ellipse(64, 32, 35, 12, 0, Math.PI * 1.1, Math.PI * 2 - 0.1);
+          ctx.fill();
+          ctx.strokeStyle = '#ff1493';
+          ctx.stroke();
+          // Visor logo
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 6px Arial';
+          ctx.fillText('G', 61, 30);
+          
+          // Eyes (cute style)
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.arc(54, 44, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(74, 44, 3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Eyelashes
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(51, 41);
+          ctx.lineTo(49, 39);
+          ctx.moveTo(57, 41);
+          ctx.lineTo(56, 39);
+          ctx.moveTo(77, 41);
+          ctx.lineTo(79, 39);
+          ctx.moveTo(71, 41);
+          ctx.lineTo(72, 39);
+          ctx.stroke();
+          
+          // Smile with lipstick
+          ctx.strokeStyle = '#ff69b4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(64, 50, 8, 0.2, Math.PI - 0.2);
+          ctx.stroke();
+          
+          // Golf polo shirt (white with pink trim)
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(35, 70, 58, 45);
+          ctx.strokeStyle = '#ddd';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(35, 70, 58, 45);
+          
+          // Collar
+          ctx.fillStyle = '#f8f8f8';
+          ctx.beginPath();
+          ctx.moveTo(45, 70);
+          ctx.lineTo(64, 75);
+          ctx.lineTo(83, 70);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = skirtColor;
+          ctx.stroke();
+          
+          // Pink buttons
+          ctx.fillStyle = secondaryColor;
+          ctx.beginPath();
+          ctx.arc(64, 85, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(64, 95, 2, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Golf skirt (pleated, pink)
+          ctx.fillStyle = skirtColor;
+          ctx.beginPath();
+          ctx.moveTo(35, 115);
+          ctx.lineTo(93, 115);
+          ctx.lineTo(88, 150);
+          ctx.lineTo(40, 150);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = '#ff1493';
+          ctx.stroke();
+          
+          // Pleats
+          ctx.strokeStyle = '#ff1493';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(45 + i * 12, 115);
+            ctx.lineTo(47 + i * 11, 150);
+            ctx.stroke();
+          }
+          
+          // Arms (slender)
+          // Left arm
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(15, 80, 16, 55);
+          ctx.strokeStyle = '#f0a0a0';
+          ctx.strokeRect(15, 80, 16, 55);
+          // Left glove
+          ctx.fillStyle = outfitColor;
+          ctx.beginPath();
+          ctx.arc(23, 140, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Right arm (holding putter)
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(97, 80, 16, 55);
+          ctx.strokeRect(97, 80, 16, 55);
+          // Right glove
+          ctx.fillStyle = outfitColor;
+          ctx.beginPath();
+          ctx.arc(105, 140, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Putter in right hand
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(105, 140);
+          ctx.lineTo(105, 215); // Shaft
+          ctx.stroke();
+          // Putter head
+          ctx.fillStyle = '#666';
+          ctx.fillRect(92, 213, 26, 7);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(92, 213, 26, 7);
+          // Grip (pink)
+          ctx.fillStyle = skirtColor;
+          ctx.fillRect(103, 140, 4, 18);
+          ctx.strokeRect(103, 140, 4, 18);
+          
+          // Legs (with socks)
+          // Left leg
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(43, 150, 16, 50);
+          ctx.strokeRect(43, 150, 16, 50);
+          // Left sock
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(43, 200, 16, 25);
+          ctx.strokeRect(43, 200, 16, 25);
+          // Left shoe
+          ctx.fillStyle = skirtColor;
+          ctx.fillRect(39, 225, 24, 12);
+          ctx.strokeRect(39, 225, 24, 12);
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(42, 228, 18, 3);
+          
+          // Right leg
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(69, 150, 16, 50);
+          ctx.strokeRect(69, 150, 16, 50);
+          // Right sock
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(69, 200, 16, 25);
+          ctx.strokeRect(69, 200, 16, 25);
+          // Right shoe
+          ctx.fillStyle = skirtColor;
+          ctx.fillRect(65, 225, 24, 12);
+          ctx.strokeRect(65, 225, 24, 12);
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(68, 228, 18, 3);
+          
+          // Add some detail lines for pseudo-3D effect
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.lineWidth = 1;
+          // Body highlights
+          ctx.beginPath();
+          ctx.moveTo(35, 80);
+          ctx.lineTo(35, 150);
+          ctx.stroke();
+          // Leg highlights
+          ctx.beginPath();
+          ctx.moveTo(43, 165);
+          ctx.lineTo(43, 225);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(71, 165);
+          ctx.lineTo(71, 225);
+          ctx.stroke();
+          
+          return new THREE.CanvasTexture(canvas);
+        };
+        
+        const robotTexture = createRobotTexture();
+        robotTexture.minFilter = THREE.LinearFilter;
+        robotTexture.magFilter = THREE.LinearFilter;
+        
+        // Create sprite (always faces camera for 2D effect)
+        const robotMaterial = new THREE.SpriteMaterial({
+          map: robotTexture,
+          transparent: true,
+          depthWrite: false, // Prevent depth issues
+          depthTest: true,
+        });
+        
+        const robot = new THREE.Sprite(robotMaterial);
+        
+        // Calculate robot position (closer to center)
+        const robotOffsetX = 2.0; // Right side of hole, closer to center
+        const robotOffsetZ = -0.5; // Slightly in front of hole
+        
+        // Base size of robot (will be scaled based on distance)
+        const baseHeight = 2.0; // 2 units tall (about human height in golf scale)
+        const aspectRatio = 128 / 256; // Width/Height from texture
+        
+        // Position robot near the hole (standing on the ground)
+        robot.position.set(
+          holePos.x + robotOffsetX,
+          baseHeight / 2 + 0.01, // Slightly above ground to prevent z-fighting
+          holePos.z + robotOffsetZ
+        );
+        
+        // Scale robot based on distance for perspective
+        const worldUnitsPerFoot = getWorldUnitsPerFoot(holeDistanceFeet);
+        const scaleFactor = 1.0; // Adjust if needed
+        robot.scale.set(
+          baseHeight * aspectRatio * scaleFactor,
+          baseHeight * scaleFactor,
+          1
+        );
+        
+        robot.userData.isRobot = true;
+        robot.userData.baseHeight = baseHeight;
+        robot.userData.aspectRatio = aspectRatio;
+        robot.renderOrder = 10; // Render above terrain
+        scene.add(robot);
+        
+        // Create robot shadow
+        const createRobotShadow = () => {
+          const shadowGeometry = new THREE.PlaneGeometry(
+            baseHeight * aspectRatio * 0.8, // Slightly smaller than robot width
+            baseHeight * 0.3 // Elliptical shadow
+          );
+          const shadowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+          });
+          
+          const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+          shadow.rotation.x = -Math.PI / 2; // Lay flat on ground
+          shadow.position.set(
+            holePos.x + robotOffsetX,
+            0.005, // Just above the green surface
+            holePos.z + robotOffsetZ + 0.1 // Slightly offset for perspective
+          );
+          
+          shadow.userData.isRobotShadow = true;
+          scene.add(shadow);
+          
+          // Store reference for updates
+          (window as any).robotShadow = shadow;
+        };
+        
+        createRobotShadow();
+        
+        // Store reference for updates
+        (window as any).robotAvatar = robot;
+        
+        return robot;
+      };
+      
+      createRobotAvatar();
+      
+      // Create second robot in putting stance (side view)
+      const createPuttingRobot = () => {
+        // Create side-view putting robot texture
+        const createPuttingRobotTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256; // Wider for side view
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          
+          // Clear background
+          ctx.clearRect(0, 0, 256, 256);
+          
+          // Black male golfer color scheme
+          const skinColor = '#8b4513'; // Brown skin
+          const outfitColor = '#000'; // Black outfit
+          const accentColor = '#ffd700'; // Gold accents
+          const shirtColor = '#1e3a8a'; // Navy blue polo
+          
+          // Transform for side view - robot facing left
+          ctx.save();
+          ctx.translate(128, 0);
+          
+          // Back leg (golf pants)
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(-5, 140, 15, 70);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-5, 140, 15, 70);
+          // Gold stripe on pants
+          ctx.strokeStyle = accentColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(-4, 145);
+          ctx.lineTo(-4, 200);
+          ctx.stroke();
+          
+          // Back foot (black golf shoe)
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(-10, 210, 25, 12);
+          ctx.strokeRect(-10, 210, 25, 12);
+          // Gold swoosh on shoe
+          ctx.strokeStyle = accentColor;
+          ctx.beginPath();
+          ctx.moveTo(-5, 215);
+          ctx.lineTo(5, 218);
+          ctx.stroke();
+          
+          // Body (leaning forward for putting stance)
+          ctx.save();
+          ctx.translate(0, 60);
+          ctx.rotate(Math.PI / 12); // Slight forward lean
+          // Navy polo shirt
+          ctx.fillStyle = shirtColor;
+          ctx.fillRect(-25, 0, 50, 70);
+          ctx.strokeStyle = '#0a1e4a';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-25, 0, 50, 70);
+          
+          // Collar
+          ctx.fillStyle = shirtColor;
+          ctx.beginPath();
+          ctx.moveTo(-25, 0);
+          ctx.lineTo(-15, 5);
+          ctx.lineTo(15, 5);
+          ctx.lineTo(25, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = accentColor;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          // Gold logo/emblem on chest
+          ctx.fillStyle = accentColor;
+          ctx.beginPath();
+          ctx.arc(-10, 20, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = shirtColor;
+          ctx.font = '8px Arial';
+          ctx.fillText('G', -13, 23);
+          ctx.restore();
+          
+          // Head (looking down at ball)
+          ctx.save();
+          ctx.translate(0, 40);
+          ctx.rotate(Math.PI / 8); // Looking down
+          ctx.fillStyle = skinColor;
+          ctx.beginPath();
+          ctx.arc(0, 0, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#6b3410';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          // Short hair (fade style)
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.arc(0, -10, 18, Math.PI, Math.PI * 2);
+          ctx.fill();
+          
+          // Baseball cap with logo
+          ctx.fillStyle = outfitColor;
+          ctx.beginPath();
+          ctx.ellipse(0, -8, 22, 15, 0, Math.PI, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#333';
+          ctx.stroke();
+          // Cap brim
+          ctx.fillStyle = '#111';
+          ctx.beginPath();
+          ctx.ellipse(-5, -5, 25, 10, -0.2, Math.PI * 0.8, Math.PI * 2.2);
+          ctx.fill();
+          // Gold logo
+          ctx.fillStyle = accentColor;
+          ctx.font = 'bold 8px Arial';
+          ctx.fillText('TW', -8, -10);
+          
+          // Eye (side view)
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.arc(-8, 3, 3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Cool sunglasses
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(-15, 2);
+          ctx.lineTo(-2, 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(-14, -1, 12, 8);
+          
+          ctx.restore();
+          
+          // Front leg (golf pants)
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(-20, 140, 15, 40); // Upper leg
+          ctx.strokeRect(-20, 140, 15, 40);
+          // Gold stripe
+          ctx.strokeStyle = accentColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(-19, 145);
+          ctx.lineTo(-19, 175);
+          ctx.stroke();
+          
+          // Bent knee
+          ctx.fillStyle = outfitColor;
+          ctx.beginPath();
+          ctx.arc(-12, 180, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Lower front leg (angled)
+          ctx.save();
+          ctx.translate(-12, 180);
+          ctx.rotate(-Math.PI / 6);
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(-7, 0, 14, 35);
+          ctx.strokeRect(-7, 0, 14, 35);
+          ctx.restore();
+          
+          // Front shoe
+          ctx.fillStyle = outfitColor;
+          ctx.fillRect(-35, 210, 25, 12);
+          ctx.strokeRect(-35, 210, 25, 12);
+          // Gold swoosh
+          ctx.strokeStyle = accentColor;
+          ctx.beginPath();
+          ctx.moveTo(-30, 215);
+          ctx.lineTo(-20, 218);
+          ctx.stroke();
+          
+          // Arms with golf gloves
+          // Back arm
+          ctx.fillStyle = skinColor;
+          ctx.save();
+          ctx.translate(5, 75);
+          ctx.rotate(Math.PI / 3);
+          ctx.fillRect(-6, 0, 12, 35);
+          ctx.strokeStyle = '#6b3410';
+          ctx.strokeRect(-6, 0, 12, 35);
+          ctx.restore();
+          
+          // Front arm
+          ctx.fillStyle = skinColor;
+          ctx.save();
+          ctx.translate(-15, 75);
+          ctx.rotate(Math.PI / 3);
+          ctx.fillRect(-7, 0, 14, 35);
+          ctx.strokeRect(-7, 0, 14, 35);
+          ctx.restore();
+          
+          // Golf gloves (white with gold)
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(-30, 115, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = accentColor;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(-22, 112, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Putter (vertical, ready to putt)
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(-26, 115);
+          ctx.lineTo(-26, 200); // Long shaft
+          ctx.stroke();
+          
+          // Putter grip
+          ctx.fillStyle = '#8B4513';
+          ctx.fillRect(-29, 115, 6, 25);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-29, 115, 6, 25);
+          
+          // Putter head
+          ctx.fillStyle = '#666';
+          ctx.fillRect(-40, 196, 30, 10);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-40, 196, 30, 10);
+          // Add putter face lines
+          ctx.strokeStyle = '#999';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(-38 + i * 7, 198);
+            ctx.lineTo(-38 + i * 7, 204);
+            ctx.stroke();
+          }
+          
+          ctx.restore();
+          
+          return new THREE.CanvasTexture(canvas);
+        };
+        
+        const puttingRobotTexture = createPuttingRobotTexture();
+        puttingRobotTexture.minFilter = THREE.LinearFilter;
+        puttingRobotTexture.magFilter = THREE.LinearFilter;
+        
+        const puttingRobotMaterial = new THREE.SpriteMaterial({
+          map: puttingRobotTexture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+        });
+        
+        const puttingRobot = new THREE.Sprite(puttingRobotMaterial);
+        
+        // Position on the opposite side of the hole from the first robot
+        const puttingRobotOffsetX = -2.0; // Left side of hole, closer to center
+        const puttingRobotOffsetZ = -1.0; // In front of hole
+        
+        puttingRobot.position.set(
+          holePos.x + puttingRobotOffsetX,
+          1.0, // Half height since bent over
+          holePos.z + puttingRobotOffsetZ
+        );
+        
+        puttingRobot.scale.set(2, 2, 1); // Make it visible
+        puttingRobot.userData.isPuttingRobot = true;
+        puttingRobot.renderOrder = 10; // Render above terrain
+        scene.add(puttingRobot);
+        
+        // Add shadow for putting robot
+        const puttingRobotShadow = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.5, 2.5),
+          new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+          })
+        );
+        puttingRobotShadow.rotation.x = -Math.PI / 2;
+        puttingRobotShadow.position.set(
+          holePos.x + puttingRobotOffsetX,
+          0.005,
+          holePos.z + puttingRobotOffsetZ + 0.2
+        );
+        puttingRobotShadow.userData.isPuttingRobotAccessory = true;
+        scene.add(puttingRobotShadow);
+        
+        // Store references
+        (window as any).puttingRobot = puttingRobot;
+        (window as any).puttingRobotShadow = puttingRobotShadow;
+      };
+      
+      createPuttingRobot();
+      
+      // Create cooler with beers and passed out frat robot
+      const createCoolerAndFratRobot = () => {
+        // Create cooler sprite
+        const createCoolerTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          
+          ctx.clearRect(0, 0, 256, 256);
+          
+          // Cooler body (red with white lid)
+          ctx.fillStyle = '#c41e3a'; // Red cooler
+          ctx.fillRect(64, 140, 128, 80);
+          
+          // White lid
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(64, 120, 128, 25);
+          
+          // Lid handle
+          ctx.strokeStyle = '#666666';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(110, 115);
+          ctx.lineTo(146, 115);
+          ctx.stroke();
+          
+          // Cooler details
+          ctx.strokeStyle = '#8b0020';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(64, 140, 128, 80);
+          
+          // Ice cubes visible at top
+          ctx.fillStyle = 'rgba(200, 230, 255, 0.9)';
+          for (let i = 0; i < 6; i++) {
+            const x = 75 + (i % 3) * 35;
+            const y = 125 + Math.floor(i / 3) * 12;
+            ctx.fillRect(x, y, 25, 10);
+            ctx.strokeStyle = '#aaccff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, 25, 10);
+          }
+          
+          // Blue beer bottles sticking out
+          ctx.fillStyle = '#1e90ff'; // Blue bottles
+          // First bottle
+          ctx.fillRect(85, 100, 15, 35);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(85, 95, 15, 8); // Cap
+          // Second bottle
+          ctx.fillStyle = '#1e90ff';
+          ctx.fillRect(115, 105, 15, 30);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(115, 100, 15, 8); // Cap
+          // Third bottle
+          ctx.fillStyle = '#1e90ff';
+          ctx.fillRect(145, 102, 15, 33);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(145, 97, 15, 8); // Cap
+          
+          // Label on cooler
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 16px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('PARTY', 128, 180);
+          
+          return new THREE.CanvasTexture(canvas);
+        };
+        
+        const coolerTexture = createCoolerTexture();
+        const coolerMaterial = new THREE.SpriteMaterial({
+          map: coolerTexture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+        });
+        
+        const cooler = new THREE.Sprite(coolerMaterial);
+        const coolerOffsetX = 3.5; // Right side of scene
+        const coolerOffsetZ = -2.5; // Back area
+        
+        cooler.position.set(
+          holePos.x + coolerOffsetX,
+          0.8,
+          holePos.z + coolerOffsetZ
+        );
+        cooler.scale.set(1.5, 1.5, 1);
+        cooler.userData.isCooler = true;
+        cooler.renderOrder = 9;
+        scene.add(cooler);
+        
+        // Create passed out frat robot
+        const createFratRobotTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          
+          ctx.clearRect(0, 0, 256, 256);
+          
+          // Robot laying on ground (horizontal)
+          ctx.save();
+          ctx.translate(128, 180);
+          ctx.rotate(-Math.PI / 2); // Laying down
+          
+          // Backwards baseball cap (on side)
+          ctx.fillStyle = '#ff6b6b'; // Red cap
+          ctx.beginPath();
+          ctx.arc(0, -35, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px Arial';
+          ctx.fillText('ΦΔΘ', -12, -32); // Frat letters
+          
+          // Head with sunglasses
+          ctx.fillStyle = '#ffcc99';
+          ctx.beginPath();
+          ctx.arc(0, -10, 18, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Sunglasses (crooked)
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(-15, -15, 30, 8);
+          
+          // Body (tank top with frat letters)
+          ctx.fillStyle = '#ffffff'; // White tank
+          ctx.fillRect(-20, 10, 40, 50);
+          ctx.fillStyle = '#ff6b6b';
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('PARTY', 0, 35);
+          ctx.fillText('BRO', 0, 50);
+          
+          // Shorts
+          ctx.fillStyle = '#4169e1'; // Blue shorts
+          ctx.fillRect(-20, 60, 40, 30);
+          
+          // Arms spread out
+          ctx.fillStyle = '#ffcc99';
+          // Left arm
+          ctx.fillRect(-50, 15, 30, 12);
+          // Right arm  
+          ctx.fillRect(20, 15, 30, 12);
+          
+          // Legs spread
+          ctx.fillStyle = '#ffcc99';
+          // Left leg
+          ctx.fillRect(-15, 90, 12, 40);
+          // Right leg
+          ctx.fillRect(3, 90, 12, 40);
+          
+          // Flip flops
+          ctx.fillStyle = '#ff1493'; // Pink flip flops
+          ctx.fillRect(-18, 130, 15, 8);
+          ctx.fillRect(0, 130, 15, 8);
+          
+          ctx.restore();
+          
+          // Putter laying across robot
+          ctx.strokeStyle = '#666666';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(40, 160);
+          ctx.lineTo(200, 200);
+          ctx.stroke();
+          
+          // Putter head
+          ctx.fillStyle = '#888888';
+          ctx.fillRect(35, 155, 15, 10);
+          
+          // Red solo cup next to him
+          ctx.fillStyle = '#ff0000';
+          ctx.beginPath();
+          ctx.moveTo(210, 180);
+          ctx.lineTo(205, 210);
+          ctx.lineTo(225, 210);
+          ctx.lineTo(220, 180);
+          ctx.closePath();
+          ctx.fill();
+          
+          return new THREE.CanvasTexture(canvas);
+        };
+        
+        const fratRobotTexture = createFratRobotTexture();
+        const fratRobotMaterial = new THREE.SpriteMaterial({
+          map: fratRobotTexture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+        });
+        
+        const fratRobot = new THREE.Sprite(fratRobotMaterial);
+        fratRobot.position.set(
+          holePos.x + coolerOffsetX - 0.5, // Next to cooler
+          0.5, // On ground
+          holePos.z + coolerOffsetZ + 0.5
+        );
+        fratRobot.scale.set(2.5, 2.5, 1); // Larger since laying down
+        fratRobot.userData.isFratRobot = true;
+        fratRobot.renderOrder = 8;
+        scene.add(fratRobot);
+        
+        // Add shadow for frat robot
+        const fratRobotShadow = new THREE.Mesh(
+          new THREE.PlaneGeometry(3, 1.5),
+          new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide,
+          })
+        );
+        fratRobotShadow.rotation.x = -Math.PI / 2;
+        fratRobotShadow.position.set(
+          fratRobot.position.x,
+          0.002,
+          fratRobot.position.z
+        );
+        fratRobotShadow.userData.isFratRobot = true;
+        scene.add(fratRobotShadow);
+        
+        // Store references
+        (window as any).cooler = cooler;
+        (window as any).fratRobot = fratRobot;
+        (window as any).fratRobotShadow = fratRobotShadow;
+      };
+      
+      createCoolerAndFratRobot();
+      
+      // Create third robot over the actual playing ball (facing toward ball)
+      const createPlayerRobot = () => {
+        // Create robot in side view facing right toward the ball
+        const createPlayerRobotTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d')!;
+          
+          // Clear background
+          ctx.clearRect(0, 0, 256, 256);
+          
+          const primaryColor = '#4a90e2';
+          const secondaryColor = '#e84a5f';
+          const metalColor = '#c0c0c0';
+          const darkMetal = '#808080';
+          
+          // Transform for side view - robot facing right toward ball
+          ctx.save();
+          ctx.translate(128, 0);
+          
+          // Back leg (facing right, so this is the left leg)
+          ctx.fillStyle = '#9a9a9a'; // Darker for depth
+          ctx.fillRect(-10, 140, 15, 70);
+          ctx.strokeStyle = darkMetal;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(-10, 140, 15, 70);
+          
+          // Back foot
+          ctx.fillStyle = '#3a7ab8'; // Darker blue
+          ctx.fillRect(-15, 210, 25, 12);
+          ctx.strokeRect(-15, 210, 25, 12);
+          
+          // Body (leaning forward and right toward ball) - properly connected
+          ctx.save();
+          ctx.translate(0, 60);
+          ctx.rotate(Math.PI / 10); // Lean forward toward ball
+          ctx.fillStyle = primaryColor;
+          ctx.fillRect(-20, 0, 40, 85); // Extended body to connect with legs
+          ctx.strokeStyle = darkMetal;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-20, 0, 40, 85);
+          
+          // Chest display (side view)
+          ctx.fillStyle = '#333';
+          ctx.fillRect(-5, 10, 15, 25);
+          ctx.fillStyle = '#00ff00';
+          for (let i = 0; i < 2; i++) {
+            for (let j = 0; j < 4; j++) {
+              ctx.fillRect(-3 + i * 7, 12 + j * 5, 3, 2);
+            }
+          }
+          ctx.restore();
+          
+          // Head (looking down and right at ball)
+          ctx.save();
+          ctx.translate(0, 40);
+          ctx.rotate(Math.PI / 6); // Looking down and right
+          ctx.fillStyle = metalColor;
+          ctx.fillRect(-20, -15, 40, 35);
+          ctx.strokeStyle = darkMetal;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-20, -15, 40, 35);
+          
+          // Eye (side view - one visible, facing right)
+          ctx.fillStyle = secondaryColor;
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = secondaryColor;
+          ctx.beginPath();
+          ctx.arc(-8, 5, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          
+          // Antenna
+          ctx.strokeStyle = darkMetal;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(0, -15);
+          ctx.lineTo(0, -22);
+          ctx.stroke();
+          ctx.fillStyle = secondaryColor;
+          ctx.beginPath();
+          ctx.arc(0, -24, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          
+          // Front leg (bent for putting stance)
+          ctx.fillStyle = metalColor;
+          ctx.fillRect(5, 140, 15, 40); // Upper leg
+          ctx.strokeRect(5, 140, 15, 40);
+          
+          // Bent knee joint
+          ctx.beginPath();
+          ctx.arc(12, 180, 5, 0, Math.PI * 2);
+          ctx.fillStyle = primaryColor;
+          ctx.fill();
+          ctx.stroke();
+          
+          // Lower front leg (angled)
+          ctx.save();
+          ctx.translate(12, 180);
+          ctx.rotate(-Math.PI / 6); // Angle for stance
+          ctx.fillStyle = metalColor;
+          ctx.fillRect(-7, 0, 14, 35);
+          ctx.strokeRect(-7, 0, 14, 35);
+          ctx.restore();
+          
+          // Front foot
+          ctx.fillStyle = primaryColor;
+          ctx.fillRect(10, 210, 25, 12);
+          ctx.strokeRect(10, 210, 25, 12);
+          
+          // Only one arm visible in side view - extended toward ball
+          ctx.fillStyle = metalColor;
+          ctx.save();
+          ctx.translate(5, 75);
+          ctx.rotate(Math.PI / 3); // Angled toward ball
+          ctx.fillRect(-7, 0, 14, 50);
+          ctx.strokeStyle = darkMetal;
+          ctx.strokeRect(-7, 0, 14, 50);
+          ctx.restore();
+          
+          // Hand gripping putter (single hand visible)
+          ctx.fillStyle = primaryColor;
+          ctx.beginPath();
+          ctx.arc(25, 120, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Putter (angled toward ball)
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(25, 120);
+          ctx.lineTo(25, 205); // Long shaft
+          ctx.stroke();
+          
+          // Putter grip
+          ctx.fillStyle = '#8B4513';
+          ctx.fillRect(22, 120, 6, 25);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(22, 120, 6, 25);
+          
+          // Putter head (positioned close to ball)
+          ctx.fillStyle = '#666';
+          ctx.fillRect(10, 201, 30, 10);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(10, 201, 30, 10);
+          // Add putter face lines
+          ctx.strokeStyle = '#999';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(12 + i * 7, 203);
+            ctx.lineTo(12 + i * 7, 209);
+            ctx.stroke();
+          }
+          
+          // Add concentration lines near head
+          ctx.strokeStyle = 'rgba(255, 200, 0, 0.5)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.arc(15, 45, 25 + i * 5, -0.3, 0.3);
+            ctx.stroke();
+          }
+          
+          ctx.restore();
+          
+          return new THREE.CanvasTexture(canvas);
+        };
+        
+        const playerRobotTexture = createPlayerRobotTexture();
+        playerRobotTexture.minFilter = THREE.LinearFilter;
+        playerRobotTexture.magFilter = THREE.LinearFilter;
+        
+        const playerRobotMaterial = new THREE.SpriteMaterial({
+          map: playerRobotTexture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+        });
+        
+        const playerRobot = new THREE.Sprite(playerRobotMaterial);
+        
+        // Position on left side of the ball looking down at it
+        // Ball starts at (0, 0.08, 4)
+        playerRobot.position.set(
+          -0.6, // Closer to ball on left side
+          1.0, // Standing height
+          4.0  // Same z as ball
+        );
+        
+        playerRobot.scale.set(2, 2, 1);
+        playerRobot.userData.isPlayerRobot = true;
+        playerRobot.renderOrder = 10; // Render above terrain
+        scene.add(playerRobot);
+        
+        // Add shadow for player robot
+        const playerRobotShadow = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.5, 2.5),
+          new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+          })
+        );
+        playerRobotShadow.rotation.x = -Math.PI / 2;
+        playerRobotShadow.position.set(
+          -0.6,
+          0.005,
+          4.2
+        );
+        playerRobotShadow.userData.isPlayerRobot = true;
+        scene.add(playerRobotShadow);
+        
+        // Store references
+        (window as any).playerRobot = playerRobot;
+        (window as any).playerRobotShadow = playerRobotShadow;
+      };
+      
+      // Only create player robot at initial hole creation (not on updates)
+      // since it should stay at the ball position
+      if (!scene.children.some(child => child.userData && child.userData.isPlayerRobot)) {
+        createPlayerRobot();
+      }
+
       // console.log(`🕳️ Hole positioned at ${holeDistanceFeet}ft (Z: ${holePos.z})`);
       return holePos;
     };
@@ -1179,8 +2262,24 @@ export default function ExpoGL3DView({
         if (element.geometry) element.geometry.dispose();
         if (element.material) element.material.dispose();
       });
+      
+      // Remove existing robots, shadows, and accessories
+      const robotElements = scene.children.filter(child => child.userData && (
+        child.userData.isRobot || 
+        child.userData.isRobotShadow || 
+        child.userData.isRobotAccessory ||
+        child.userData.isPuttingRobot ||
+        child.userData.isPuttingRobotAccessory ||
+        child.userData.isCooler ||
+        child.userData.isFratRobot
+      ));
+      robotElements.forEach(element => {
+        scene.remove(element);
+        if (element.geometry) element.geometry.dispose();
+        if (element.material) element.material.dispose();
+      });
 
-      // Create hole at new position
+      // Create hole at new position (this will also create new robot)
       const newHolePos = createHole(newHoleDistanceFeet);
       (window as any).currentHolePosition = newHolePos;
       // console.log(`🔄 Hole moved to ${newHoleDistanceFeet}ft`);
@@ -1324,6 +2423,8 @@ export default function ExpoGL3DView({
           );
         }
 
+        // Robot stands still (no animation for better grounding)
+        
         // Animate all flags with realistic waving motion
         const time = Date.now() * 0.002; // Slower animation
         scene.children.forEach(child => {
@@ -1425,6 +2526,52 @@ export default function ExpoGL3DView({
   useEffect(() => {
     if (isPutting && !isAnimating && ballRef.current) {
       setIsAnimating(true);
+      
+      // Animate player robot putting stroke
+      const playerRobot = (window as any).playerRobot;
+      if (playerRobot) {
+        // Store original position
+        const originalX = playerRobot.position.x;
+        
+        // Backstroke animation (move left away from ball)
+        let strokeTime = 0;
+        const strokeDuration = 0.5; // Half second for backstroke
+        const backstrokeDistance = -0.2; // Move left 0.2 units
+        
+        const animateStroke = () => {
+          strokeTime += 0.016; // 60fps
+          
+          if (strokeTime < strokeDuration) {
+            // Move robot left during backstroke
+            const progress = strokeTime / strokeDuration;
+            const easeProgress = Math.sin(progress * Math.PI / 2); // Ease out
+            playerRobot.position.x = originalX + (backstrokeDistance * easeProgress);
+            requestAnimationFrame(animateStroke);
+          } else {
+            // Forward stroke (move right toward ball)
+            let forwardTime = 0;
+            const forwardDuration = 0.3; // Faster forward stroke
+            
+            const animateForward = () => {
+              forwardTime += 0.016;
+              
+              if (forwardTime < forwardDuration) {
+                const progress = forwardTime / forwardDuration;
+                const easeProgress = 1 - Math.cos(progress * Math.PI / 2); // Ease in
+                playerRobot.position.x = originalX + backstrokeDistance - (backstrokeDistance * easeProgress * 1.5); // Overshoot slightly toward ball
+                requestAnimationFrame(animateForward);
+              } else {
+                // Return to original position
+                playerRobot.position.x = originalX;
+              }
+            };
+            
+            animateForward();
+          }
+        };
+        
+        animateStroke();
+      }
 
       // Calculate trajectory
       const startPos = new THREE.Vector3(0, 0.08, 4); // Match ball radius
@@ -1626,6 +2773,487 @@ export default function ExpoGL3DView({
               ) / 0.3048; // Actual distance traveled in feet
             const timeToHole = currentStep * 0.05;
 
+            // Robot reaction for successful putt
+            const triggerRobotReaction = () => {
+              const robot = (window as any).robotAvatar;
+              const scene = sceneRef.current;
+              if (!robot || !scene) return;
+              
+              // Create speech bubble
+              const createSpeechBubble = (message: string, emoji: string = '🎉') => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 128;
+                const ctx = canvas.getContext('2d')!;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, 512, 128);
+                
+                // Draw bubble background
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(20, 10, 472, 80, 15);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Draw bubble tail
+                ctx.beginPath();
+                ctx.moveTo(100, 90);
+                ctx.lineTo(80, 110);
+                ctx.lineTo(120, 90);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                // Draw text
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(emoji + ' ' + message, 256, 50);
+                
+                const bubbleTexture = new THREE.CanvasTexture(canvas);
+                const bubbleMaterial = new THREE.SpriteMaterial({
+                  map: bubbleTexture,
+                  transparent: true,
+                  depthWrite: false,
+                  depthTest: false, // Render on top of everything
+                });
+                
+                const bubble = new THREE.Sprite(bubbleMaterial);
+                bubble.position.set(
+                  robot.position.x + 3.0, // To the right of robot
+                  robot.position.y, // Same height as robot
+                  robot.position.z // Same z position
+                );
+                bubble.scale.set(4, 1, 1);
+                bubble.userData.isSpeechBubble = true;
+                bubble.renderOrder = 100; // Highest render order to appear on top
+                scene.add(bubble);
+                
+                // Remove bubble after 5 seconds (longer display time)
+                setTimeout(() => {
+                  scene.remove(bubble);
+                  if (bubble.material) bubble.material.dispose();
+                  if (bubble.material.map) bubble.material.map.dispose();
+                }, 5000);
+              };
+              
+              if (success) {
+                // Success dance animation with intricate movements
+                createSpeechBubble("Smooth as a knife through hot butter!", '🔥');
+                
+                // Create dance pose textures
+                const createDancePose = (poseType: string) => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = 128;
+                  canvas.height = 256;
+                  const ctx = canvas.getContext('2d')!;
+                  
+                  ctx.clearRect(0, 0, 128, 256);
+                  
+                  // Female robot colors
+                  const skinColor = '#fdbcb4';
+                  const outfitColor = '#fff';
+                  const skirtColor = '#ff69b4';
+                  const hairColor = '#8b4513';
+                  
+                  // Hair (changes position with dance)
+                  ctx.fillStyle = hairColor;
+                  if (poseType === 'left') {
+                    // Hair swaying left
+                    ctx.beginPath();
+                    ctx.moveTo(30, 30);
+                    ctx.quadraticCurveTo(20, 50, 25, 75);
+                    ctx.quadraticCurveTo(30, 85, 40, 90);
+                    ctx.lineTo(45, 70);
+                    ctx.lineTo(43, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(85, 30);
+                    ctx.quadraticCurveTo(88, 50, 85, 75);
+                    ctx.quadraticCurveTo(83, 85, 78, 90);
+                    ctx.lineTo(73, 70);
+                    ctx.lineTo(75, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                  } else if (poseType === 'right') {
+                    // Hair swaying right
+                    ctx.beginPath();
+                    ctx.moveTo(43, 30);
+                    ctx.quadraticCurveTo(40, 50, 43, 75);
+                    ctx.quadraticCurveTo(45, 85, 50, 90);
+                    ctx.lineTo(55, 70);
+                    ctx.lineTo(53, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(98, 30);
+                    ctx.quadraticCurveTo(108, 50, 103, 75);
+                    ctx.quadraticCurveTo(98, 85, 88, 90);
+                    ctx.lineTo(83, 70);
+                    ctx.lineTo(85, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                  } else {
+                    // Default hair position
+                    ctx.beginPath();
+                    ctx.moveTo(40, 30);
+                    ctx.quadraticCurveTo(35, 50, 38, 75);
+                    ctx.quadraticCurveTo(40, 85, 45, 90);
+                    ctx.lineTo(50, 70);
+                    ctx.lineTo(48, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(88, 30);
+                    ctx.quadraticCurveTo(93, 50, 90, 75);
+                    ctx.quadraticCurveTo(88, 85, 83, 90);
+                    ctx.lineTo(78, 70);
+                    ctx.lineTo(80, 35);
+                    ctx.closePath();
+                    ctx.fill();
+                  }
+                  
+                  // Head (same for all poses)
+                  ctx.fillStyle = skinColor;
+                  ctx.beginPath();
+                  ctx.arc(64, 45, 23, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.strokeStyle = '#f0a0a0';
+                  ctx.lineWidth = 1;
+                  ctx.stroke();
+                  
+                  // Hair on top
+                  ctx.fillStyle = hairColor;
+                  ctx.beginPath();
+                  ctx.ellipse(64, 28, 24, 12, 0, Math.PI, Math.PI * 2);
+                  ctx.fill();
+                  
+                  // Pink visor
+                  ctx.fillStyle = skirtColor;
+                  ctx.beginPath();
+                  ctx.ellipse(64, 32, 28, 8, 0, Math.PI, Math.PI * 2);
+                  ctx.fill();
+                  ctx.fillStyle = '#ff85c8';
+                  ctx.beginPath();
+                  ctx.ellipse(64, 32, 35, 12, 0, Math.PI * 1.1, Math.PI * 2 - 0.1);
+                  ctx.fill();
+                  
+                  // Eyes (happy/excited)
+                  ctx.fillStyle = '#000';
+                  ctx.beginPath();
+                  ctx.arc(54, 44, 2, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.beginPath();
+                  ctx.arc(74, 44, 2, 0, Math.PI * 2);
+                  ctx.fill();
+                  
+                  // Big smile
+                  ctx.strokeStyle = '#ff69b4';
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.arc(64, 48, 10, 0.1, Math.PI - 0.1);
+                  ctx.stroke();
+                  
+                  // Body/outfit
+                  ctx.fillStyle = outfitColor;
+                  ctx.fillRect(35, 70, 58, 45);
+                  ctx.strokeStyle = '#ddd';
+                  ctx.lineWidth = 1;
+                  ctx.strokeRect(35, 70, 58, 45);
+                  
+                  // Pink skirt
+                  ctx.fillStyle = skirtColor;
+                  ctx.beginPath();
+                  ctx.moveTo(35, 115);
+                  ctx.lineTo(93, 115);
+                  ctx.lineTo(88, 145);
+                  ctx.lineTo(40, 145);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.stroke();
+                  
+                  // Different poses
+                  if (poseType === 'arms-up') {
+                    // Arms raised up in victory
+                    ctx.save();
+                    ctx.translate(28, 85);
+                    ctx.rotate(-Math.PI / 3);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 45);
+                    ctx.strokeRect(-8, 0, 16, 45);
+                    ctx.restore();
+                    
+                    ctx.save();
+                    ctx.translate(100, 85);
+                    ctx.rotate(Math.PI / 3);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 45);
+                    ctx.strokeRect(-8, 0, 16, 45);
+                    ctx.restore();
+                    
+                    // Putter raised in celebration
+                    ctx.save();
+                    ctx.translate(105, 50);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.strokeStyle = '#444';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(0, 50);
+                    ctx.stroke();
+                    ctx.fillStyle = skirtColor;
+                    ctx.fillRect(-2, 0, 4, 15);
+                    ctx.fillStyle = '#666';
+                    ctx.fillRect(-8, 48, 16, 5);
+                    ctx.restore();
+                    
+                    // Legs normal with socks
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(43, 145, 16, 45);
+                    ctx.strokeRect(43, 145, 16, 45);
+                    ctx.fillRect(69, 145, 16, 45);
+                    ctx.strokeRect(69, 145, 16, 45);
+                    
+                    // Socks
+                    ctx.fillStyle = outfitColor;
+                    ctx.fillRect(43, 190, 16, 25);
+                    ctx.strokeRect(43, 190, 16, 25);
+                    ctx.fillRect(69, 190, 16, 25);
+                    ctx.strokeRect(69, 190, 16, 25);
+                    
+                  } else if (poseType === 'split') {
+                    // Arms horizontal
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(5, 95, 23, 14);
+                    ctx.strokeRect(5, 95, 23, 14);
+                    ctx.fillRect(100, 95, 23, 14);
+                    ctx.strokeRect(100, 95, 23, 14);
+                    
+                    // White gloves at ends
+                    ctx.fillStyle = outfitColor;
+                    ctx.beginPath();
+                    ctx.arc(3, 102, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(125, 102, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Legs split with socks
+                    ctx.save();
+                    ctx.translate(51, 145);
+                    ctx.rotate(-Math.PI / 8);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 35);
+                    ctx.strokeRect(-8, 0, 16, 35);
+                    ctx.fillStyle = outfitColor;
+                    ctx.fillRect(-8, 35, 16, 25);
+                    ctx.strokeRect(-8, 35, 16, 25);
+                    ctx.restore();
+                    
+                    ctx.save();
+                    ctx.translate(77, 145);
+                    ctx.rotate(Math.PI / 8);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 35);
+                    ctx.strokeRect(-8, 0, 16, 35);
+                    ctx.fillStyle = outfitColor;
+                    ctx.fillRect(-8, 35, 16, 25);
+                    ctx.strokeRect(-8, 35, 16, 25);
+                    ctx.restore();
+                    
+                  } else if (poseType === 'disco') {
+                    // One arm up, one down
+                    ctx.save();
+                    ctx.translate(28, 85);
+                    ctx.rotate(-Math.PI / 4);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 50);
+                    ctx.strokeRect(-8, 0, 16, 50);
+                    ctx.restore();
+                    
+                    ctx.save();
+                    ctx.translate(100, 110);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(-8, 0, 16, 40);
+                    ctx.strokeRect(-8, 0, 16, 40);
+                    ctx.restore();
+                    
+                    // One leg bent
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(43, 145, 16, 45);
+                    ctx.strokeRect(43, 145, 16, 45);
+                    
+                    ctx.save();
+                    ctx.translate(77, 145);
+                    ctx.fillRect(-8, 0, 16, 30);
+                    ctx.strokeRect(-8, 0, 16, 30);
+                    ctx.translate(0, 30);
+                    ctx.rotate(-Math.PI / 6);
+                    ctx.fillRect(-8, 0, 16, 25);
+                    ctx.strokeRect(-8, 0, 16, 25);
+                    ctx.restore();
+                    
+                    // Socks on straight leg
+                    ctx.fillStyle = outfitColor;
+                    ctx.fillRect(43, 190, 16, 25);
+                    ctx.strokeRect(43, 190, 16, 25);
+                    
+                  } else {
+                    // Default pose (arms down)
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(15, 80, 16, 50);
+                    ctx.strokeRect(15, 80, 16, 50);
+                    ctx.fillRect(97, 80, 16, 50);
+                    ctx.strokeRect(97, 80, 16, 50);
+                    
+                    // Gloves
+                    ctx.fillStyle = outfitColor;
+                    ctx.beginPath();
+                    ctx.arc(23, 135, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(105, 135, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = skinColor;
+                    ctx.fillRect(43, 145, 16, 45);
+                    ctx.strokeRect(43, 145, 16, 45);
+                    ctx.fillRect(69, 145, 16, 45);
+                    ctx.strokeRect(69, 145, 16, 45);
+                    
+                    // Socks
+                    ctx.fillStyle = outfitColor;
+                    ctx.fillRect(43, 190, 16, 25);
+                    ctx.strokeRect(43, 190, 16, 25);
+                    ctx.fillRect(69, 190, 16, 25);
+                    ctx.strokeRect(69, 190, 16, 25);
+                  }
+                  
+                  // Pink golf shoes for all poses
+                  ctx.fillStyle = skirtColor;
+                  ctx.fillRect(39, 215, 24, 12);
+                  ctx.strokeRect(39, 215, 24, 12);
+                  ctx.fillRect(65, 215, 24, 12);
+                  ctx.strokeRect(65, 215, 24, 12);
+                  ctx.fillStyle = outfitColor;
+                  ctx.fillRect(42, 218, 18, 3);
+                  ctx.fillRect(68, 218, 18, 3);
+                  
+                  return new THREE.CanvasTexture(canvas);
+                };
+                
+                // Create different pose textures
+                const poses = [
+                  createDancePose('arms-up'),
+                  createDancePose('split'),
+                  createDancePose('disco'),
+                  createDancePose('default'),
+                ];
+                
+                // Store original texture
+                const originalTexture = robot.material.map;
+                const originalY = robot.position.y;
+                
+                let danceTime = 0;
+                let currentPoseIndex = 0;
+                let lastPoseChange = 0;
+                
+                const danceAnimation = () => {
+                  danceTime += 0.016; // ~60fps increment
+                  if (danceTime < 5) { // 5 seconds duration
+                    // Change pose every 0.3 seconds
+                    if (danceTime - lastPoseChange > 0.3) {
+                      currentPoseIndex = (currentPoseIndex + 1) % poses.length;
+                      robot.material.map = poses[currentPoseIndex];
+                      robot.material.needsUpdate = true;
+                      lastPoseChange = danceTime;
+                    }
+                    
+                    // Bouncing motion
+                    robot.position.y = originalY + Math.abs(Math.sin(danceTime * 4)) * 0.2;
+                    
+                    // Slight side-to-side sway
+                    robot.position.x = robot.userData.originalX + Math.sin(danceTime * 3) * 0.3;
+                    
+                    requestAnimationFrame(danceAnimation);
+                  } else {
+                    // Reset to original state
+                    robot.position.y = originalY;
+                    robot.position.x = robot.userData.originalX || robot.position.x;
+                    robot.material.map = originalTexture;
+                    robot.material.needsUpdate = true;
+                    
+                    // Dispose of dance textures
+                    poses.forEach(pose => pose.dispose());
+                  }
+                };
+                
+                // Store original X position if not already stored
+                if (!robot.userData.originalX) {
+                  robot.userData.originalX = robot.position.x;
+                }
+                
+                danceAnimation();
+              } else {
+                // Check if missed short (ball didn't reach hole)
+                const distanceToHole = Math.sqrt(
+                  Math.pow(currentPos.x - currentHolePos.x, 2) +
+                  Math.pow(currentPos.z - currentHolePos.z, 2)
+                );
+                const targetDistance = Math.abs(4 - currentHolePos.z); // Expected distance
+                const actualDistance = Math.abs(4 - currentPos.z);
+                
+                if (actualDistance < targetDistance * 0.8) {
+                  // Missed short
+                  createSpeechBubble("Better workout kid!", '💪');
+                  
+                  // Flexing animation
+                  const originalScaleX = robot.scale.x;
+                  const originalScaleY = robot.scale.y;
+                  let flexTime = 0;
+                  const flexAnimation = () => {
+                    flexTime += 0.016; // ~60fps increment
+                    if (flexTime < 4) { // Increased duration to 4 seconds
+                      // Flex muscles (scale up and down) - slower frequency
+                      const flex = 1 + Math.sin(flexTime * 1.5) * 0.3; // Much slower flexing
+                      robot.scale.x = originalScaleX * flex;
+                      robot.scale.y = originalScaleY * (2 - flex); // Inverse for comedic effect
+                      requestAnimationFrame(flexAnimation);
+                    } else {
+                      // Reset scale
+                      robot.scale.x = originalScaleX;
+                      robot.scale.y = originalScaleY;
+                    }
+                  };
+                  flexAnimation();
+                } else {
+                  // Missed long or wide
+                  createSpeechBubble("So close! Try again!", '😅');
+                  
+                  // Head shake animation
+                  let shakeTime = 0;
+                  const shakeAnimation = () => {
+                    shakeTime += 0.016; // ~60fps increment
+                    if (shakeTime < 3) { // Increased duration to 3 seconds
+                      robot.material.rotation = Math.sin(shakeTime * 4) * 0.3; // Slower shaking
+                      requestAnimationFrame(shakeAnimation);
+                    } else {
+                      robot.material.rotation = 0;
+                    }
+                  };
+                  shakeAnimation();
+                }
+              }
+            };
+            
+            triggerRobotReaction();
+            
             onPuttComplete({
               success,
               accuracy,
@@ -1679,6 +3307,115 @@ export default function ExpoGL3DView({
             0.3048; // Actual distance in feet
 
           const timeToHole = trajectory.length * 0.05;
+
+          // Robot reaction for missed putt (reuse the same function)
+          const triggerRobotReactionMiss = () => {
+            const robot = (window as any).robotAvatar;
+            const scene = sceneRef.current;
+            if (!robot || !scene) return;
+            
+            // Create speech bubble (same function as above)
+            const createSpeechBubble = (message: string, emoji: string = '🎉') => {
+              const canvas = document.createElement('canvas');
+              canvas.width = 512;
+              canvas.height = 128;
+              const ctx = canvas.getContext('2d')!;
+              
+              ctx.clearRect(0, 0, 512, 128);
+              
+              ctx.fillStyle = 'white';
+              ctx.strokeStyle = '#333';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.roundRect(20, 10, 472, 80, 15);
+              ctx.fill();
+              ctx.stroke();
+              
+              ctx.beginPath();
+              ctx.moveTo(100, 90);
+              ctx.lineTo(80, 110);
+              ctx.lineTo(120, 90);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+              
+              ctx.fillStyle = '#333';
+              ctx.font = 'bold 24px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(emoji + ' ' + message, 256, 50);
+              
+              const bubbleTexture = new THREE.CanvasTexture(canvas);
+              const bubbleMaterial = new THREE.SpriteMaterial({
+                map: bubbleTexture,
+                transparent: true,
+                depthWrite: false,
+                depthTest: false, // Render on top of everything
+              });
+              
+              const bubble = new THREE.Sprite(bubbleMaterial);
+              bubble.position.set(
+                robot.position.x + 3.0, // To the right of robot
+                robot.position.y, // Same height as robot
+                robot.position.z // Same z position
+              );
+              bubble.scale.set(4, 1, 1);
+              bubble.userData.isSpeechBubble = true;
+              bubble.renderOrder = 100; // Highest render order to appear on top
+              scene.add(bubble);
+              
+              setTimeout(() => {
+                scene.remove(bubble);
+                if (bubble.material) bubble.material.dispose();
+                if (bubble.material.map) bubble.material.map.dispose();
+              }, 5000); // Longer display time
+            };
+            
+            // Check if missed short
+            const targetDistance = Math.abs(4 - currentHolePos.z);
+            const actualDistance = Math.abs(4 - finalPos.z);
+            
+            if (actualDistance < targetDistance * 0.8) {
+              // Missed short
+              createSpeechBubble("Better workout kid!", '💪');
+              
+              // Flexing animation - SLOWER
+              const originalScaleX = robot.scale.x;
+              const originalScaleY = robot.scale.y;
+              let flexTime = 0;
+              const flexAnimation = () => {
+                flexTime += 0.016; // ~60fps
+                if (flexTime < 4) { // 4 seconds duration
+                  const flex = 1 + Math.sin(flexTime * 1.5) * 0.3; // Slower flex
+                  robot.scale.x = originalScaleX * flex;
+                  robot.scale.y = originalScaleY * (2 - flex);
+                  requestAnimationFrame(flexAnimation);
+                } else {
+                  robot.scale.x = originalScaleX;
+                  robot.scale.y = originalScaleY;
+                }
+              };
+              flexAnimation();
+            } else {
+              // Missed long or wide
+              createSpeechBubble("So close! Try again!", '😅');
+              
+              // Head shake animation - SLOWER
+              let shakeTime = 0;
+              const shakeAnimation = () => {
+                shakeTime += 0.016; // ~60fps
+                if (shakeTime < 3) { // 3 seconds duration
+                  robot.material.rotation = Math.sin(shakeTime * 4) * 0.3; // Slower shake
+                  requestAnimationFrame(shakeAnimation);
+                } else {
+                  robot.material.rotation = 0;
+                }
+              };
+              shakeAnimation();
+            }
+          };
+          
+          triggerRobotReactionMiss();
 
           onPuttComplete({
             success,
@@ -1837,8 +3574,8 @@ export default function ExpoGL3DView({
       element.addEventListener('mousemove', handleMouseMove);
       element.addEventListener('mouseup', handleMouseUp);
       
-      // Only add wheel listener with passive: false when actually needed
-      element.addEventListener('wheel', handleWheel, { passive: true });
+      // Add wheel listener with passive: false to allow preventDefault
+      element.addEventListener('wheel', handleWheel, { passive: false });
 
       return () => {
         element.removeEventListener('mousemove', handleMouseMove);
