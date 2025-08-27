@@ -1539,7 +1539,7 @@ const styles = StyleSheet.create({
   // Challenge Mode Styles
   levelSelectButton: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 80, // Moved up to avoid overlapping with PUTT button
     right: 20,
     backgroundColor: 'rgba(76, 175, 80, 0.95)',
     paddingHorizontal: 20,
