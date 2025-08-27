@@ -27,6 +27,7 @@ interface ExpoGL3DViewProps {
   puttingData: PuttingData;
   isPutting: boolean;
   showTrajectory: boolean;
+  showAimLine: boolean;
   onPuttComplete: (result: PuttingResult) => void;
 }
 
@@ -34,6 +35,7 @@ export default function ExpoGL3DView({
   puttingData,
   isPutting,
   showTrajectory,
+  showAimLine,
   onPuttComplete,
 }: ExpoGL3DViewProps) {
   const rendererRef = useRef<Renderer | null>(null);
@@ -43,10 +45,31 @@ export default function ExpoGL3DView({
   const animationRef = useRef<number | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Camera control state
+  // Camera control state - Dynamic zoom based on putt distance  
   const [cameraAngle, setCameraAngle] = useState(0);
   const [cameraHeight, setCameraHeight] = useState(6);
-  const [cameraRadius, setCameraRadius] = useState(8); // Make radius adjustable for zoom
+  
+  // Initialize camera radius based on initial hole distance (will use centralized scaling when available)
+  const getInitialCameraRadius = (distanceFeet: number) => {
+    const BASE_RADIUS = 8;
+    
+    // Use same scaling logic as getWorldUnitsPerFoot (hardcoded for initialization)
+    let worldUnitsPerFoot;
+    if (distanceFeet <= 10) worldUnitsPerFoot = 1.0;
+    else if (distanceFeet <= 25) worldUnitsPerFoot = 0.8;
+    else if (distanceFeet <= 50) worldUnitsPerFoot = 0.6;
+    else if (distanceFeet <= 100) worldUnitsPerFoot = 0.4;
+    else worldUnitsPerFoot = 0.25;
+    
+    const ballZ = 4;
+    const holeZ = ballZ - (distanceFeet * worldUnitsPerFoot);
+    const totalSceneDepth = Math.abs(ballZ - holeZ);
+    const requiredRadius = totalSceneDepth * 0.8;
+    
+    return Math.max(BASE_RADIUS, requiredRadius);
+  };
+  
+  const [cameraRadius, setCameraRadius] = useState(() => getInitialCameraRadius(puttingData.holeDistance));
   const [isDragging, setIsDragging] = useState(false);
   const [lastPointer, setLastPointer] = useState({ x: 0, y: 0 });
   const [autoRotate, setAutoRotate] = useState(true);
@@ -99,7 +122,7 @@ export default function ExpoGL3DView({
     }
   }, [puttingData.slopeUpDown, puttingData.slopeLeftRight, lastSlopeUpDown, lastSlopeLeftRight]);
 
-  // Handle hole distance changes
+  // Handle hole distance changes - Update hole, green size, and camera zoom
   useEffect(() => {
     if (lastHoleDistance !== puttingData.holeDistance) {
       console.log('🕳️ HOLE DISTANCE CHANGED:', {
@@ -107,12 +130,52 @@ export default function ExpoGL3DView({
         New: puttingData.holeDistance,
       });
 
+      // Update hole position
       const updateHole = (window as any).updateHolePosition;
       if (updateHole) {
         const newHolePos = updateHole(puttingData.holeDistance);
         (window as any).currentHolePosition = newHolePos;
         console.log('✅ Hole position updated in 3D scene');
       }
+
+      // Update green size for long putts
+      const updateGreenSize = (window as any).updateGreenSize;
+      if (updateGreenSize) {
+        updateGreenSize(puttingData.holeDistance);
+        console.log('✅ Green size updated for new distance');
+      }
+
+      // Auto-adjust camera zoom based on actual hole position using centralized scaling
+      const distanceFeet = puttingData.holeDistance;
+      const BASE_RADIUS = 8; // Base radius for short putts
+      
+      // Use centralized scaling function
+      const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(distanceFeet) : 1.0;
+      
+      const ballZ = 4;
+      const holeZ = ballZ - (distanceFeet * worldUnitsPerFoot);
+      const totalSceneDepth = Math.abs(ballZ - holeZ); // Total Z distance from ball to hole
+      
+      // Camera needs to see from ball (Z=4) to hole (Z=holeZ)
+      // Add 20% margin for comfortable viewing
+      const requiredRadius = totalSceneDepth * 0.8; // Camera radius to see full scene
+      const newRadius = Math.max(BASE_RADIUS, requiredRadius);
+      
+      console.log(`📷 CAMERA ZOOM LOGIC:`, {
+        distanceFeet,
+        worldUnitsPerFoot,
+        ballZ,
+        holeZ: holeZ.toFixed(1),
+        totalSceneDepth: totalSceneDepth.toFixed(1),
+        requiredRadius: requiredRadius.toFixed(1),
+        newRadius: newRadius.toFixed(1),
+        currentRadius: cameraRadius
+      });
+      
+      
+      setCameraRadius(newRadius);
+      console.log(`📷 Camera zoom adjusted for ${distanceFeet}ft putt: radius ${newRadius.toFixed(1)}`);
 
       setLastHoleDistance(puttingData.holeDistance);
     }
@@ -180,59 +243,87 @@ export default function ExpoGL3DView({
     rimLight.position.set(0, 5, -15);
     scene.add(rimLight);
 
-    // NEW APPROACH: ALWAYS FLAT GREEN - NEVER CHANGES GEOMETRY
-    const createFlatGreen = () => {
-      console.log('🏌️ Creating ALWAYS FLAT green - no geometry changes ever');
-
-      const radius = 8;
-      const segments = 64;
+    // Dynamic green size based on hole distance - scales for long putts
+    const createAdaptiveGreen = (holeDistanceFeet: number) => {
+      console.log(`🏌️ Creating adaptive green for ${holeDistanceFeet}ft putt`);
+      
+      // Scale green size based on distance: minimum 8 units, max 40 units
+      // Short putts (8ft): 8 unit radius
+      // Medium putts (50ft): 20 unit radius  
+      // Long putts (200ft): 40 unit radius
+      const minRadius = 8;
+      const maxRadius = 40;
+      const scaleFactor = Math.min(maxRadius / minRadius, Math.max(1, holeDistanceFeet / 8));
+      const radius = minRadius * scaleFactor;
+      
+      const segments = Math.min(128, Math.max(32, Math.floor(radius * 4))); // More segments for larger greens
       const geometry = new THREE.CircleGeometry(radius, segments);
-
-      // NEVER modify geometry - always stays flat and green
-      console.log('✅ Flat green created - geometry never changes');
-      return geometry;
+      
+      console.log(`✅ Adaptive green created: ${radius.toFixed(1)} unit radius for ${holeDistanceFeet}ft`);
+      return { geometry, radius };
     };
 
-    // Create realistic grass texture with proper green colors
-    const createRealisticGrassTexture = () => {
+    // Create ultra-realistic grass texture for putting green
+    const createPremiumGrassTexture = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
+      canvas.width = 1024; // Higher resolution for better quality
+      canvas.height = 1024;
       const ctx = canvas.getContext('2d')!;
 
-      // Base green with natural gradient
-      const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
-      gradient.addColorStop(0, '#4CAF50'); // Bright putting green center
-      gradient.addColorStop(0.8, '#388E3C'); // Medium green
-      gradient.addColorStop(1, '#2E7D32'); // Darker edges
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 512, 512);
+      // Create beautiful putting green base with professional color gradient
+      const baseGradient = ctx.createRadialGradient(512, 512, 0, 512, 512, 512);
+      baseGradient.addColorStop(0, '#0d5016'); // Deep putting green center
+      baseGradient.addColorStop(0.3, '#2e7d32'); // Rich green
+      baseGradient.addColorStop(0.7, '#4caf50'); // Bright green
+      baseGradient.addColorStop(1, '#66bb6a'); // Lighter edge
+      ctx.fillStyle = baseGradient;
+      ctx.fillRect(0, 0, 1024, 1024);
 
-      // Add realistic grass blade texture
-      for (let i = 0; i < 2000; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const length = 1 + Math.random() * 3;
+      // Add professional putting green mowing pattern (stripes)
+      ctx.globalCompositeOperation = 'multiply';
+      const stripeWidth = 32;
+      for (let i = 0; i < 1024; i += stripeWidth * 2) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; // Very subtle lightening
+        ctx.fillRect(i, 0, stripeWidth, 1024);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Add very fine grass blade texture (more realistic)
+      for (let i = 0; i < 8000; i++) { // More grass blades
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        const length = 0.5 + Math.random() * 2; // Shorter, finer blades
+        const width = 0.3 + Math.random() * 0.4;
         const angle = Math.random() * Math.PI * 2;
-        const brightness = 0.8 + Math.random() * 0.4;
+        const brightness = 0.7 + Math.random() * 0.5;
 
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
 
-        // Use proper green color values
-        const greenIntensity = Math.floor(140 * brightness);
-        ctx.fillStyle = `rgba(${Math.floor(greenIntensity * 0.3)}, ${greenIntensity}, ${Math.floor(greenIntensity * 0.4)}, 0.8)`;
-        ctx.fillRect(-0.5, 0, 1, length);
+        // Create realistic grass blade with gradient
+        const grassGradient = ctx.createLinearGradient(0, 0, 0, length);
+        const baseGreen = Math.floor(120 + (brightness * 40));
+        grassGradient.addColorStop(0, `rgba(${Math.floor(baseGreen * 0.2)}, ${baseGreen}, ${Math.floor(baseGreen * 0.3)}, 0.9)`); // Tip
+        grassGradient.addColorStop(0.7, `rgba(${Math.floor(baseGreen * 0.3)}, ${Math.floor(baseGreen * 0.8)}, ${Math.floor(baseGreen * 0.4)}, 0.8)`); // Middle
+        grassGradient.addColorStop(1, `rgba(${Math.floor(baseGreen * 0.4)}, ${Math.floor(baseGreen * 0.6)}, ${Math.floor(baseGreen * 0.2)}, 0.6)`); // Base
+        
+        ctx.fillStyle = grassGradient;
+        ctx.fillRect(-width/2, 0, width, length);
         ctx.restore();
       }
 
-      // Add putting green mowing lines
-      ctx.globalCompositeOperation = 'multiply';
-      for (let i = 0; i < 16; i++) {
-        const stripe = i % 2 === 0;
-        ctx.fillStyle = stripe ? 'rgba(255, 255, 255, 0.95)' : 'rgba(0, 0, 0, 0.95)';
-        ctx.fillRect(i * 32, 0, 32, 512);
+      // Add subtle variations with different tones
+      for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        const size = 1 + Math.random() * 3;
+        const opacity = 0.1 + Math.random() * 0.2;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0, 50, 0, ${opacity})`; // Dark green spots
+        ctx.fill();
       }
 
       return new THREE.CanvasTexture(canvas);
@@ -313,23 +404,25 @@ export default function ExpoGL3DView({
       return new THREE.CanvasTexture(canvas);
     };
 
-    // Initialize FLAT green that NEVER changes
-    const currentGreenGeometry = createFlatGreen();
-    // const grassTexture = createRealisticGrassTexture();
-    // grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-    // grassTexture.repeat.set(2, 2);
+    // Initialize adaptive green that scales with distance
+    let currentGreenData = createAdaptiveGreen(puttingData.holeDistance);
+    let currentGreenRadius = currentGreenData.radius;
+    
+    // Store green radius globally for trajectory calculations
+    (window as any).currentGreenRadius = currentGreenRadius;
 
-    // Use MeshBasicMaterial - not affected by lighting, stays green always
+    // Use simple MeshBasicMaterial that works reliably
     const greenMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4caf50, // Solid green color - will not change with lighting
+      color: 0x4caf50, // Simple green color
       side: THREE.DoubleSide,
     });
 
-    const green = new THREE.Mesh(currentGreenGeometry, greenMaterial);
-    green.rotation.x = -Math.PI / 2;
+    let green = new THREE.Mesh(currentGreenData.geometry, greenMaterial);
+    green.rotation.x = -Math.PI / 2; // Rotate to lie flat
     green.position.y = 0;
     green.receiveShadow = true;
     green.castShadow = false;
+    green.userData.isGreen = true; // Mark for updates
     scene.add(green);
 
     // Add slope overlay if there's significant slope
@@ -407,9 +500,10 @@ export default function ExpoGL3DView({
           side: THREE.DoubleSide,
         });
 
-        // Scatter arrows across the green surface
-        const numArrows = Math.min(12, Math.ceil(totalSlope / 2)); // More arrows for steeper slopes
-        const greenRadius = 7; // Stay within green bounds
+        // Number of arrows correlates directly with slope intensity
+        // 1 degree = 1 arrow, 2 degrees = 2 arrows, etc. (max 15 arrows for readability)
+        const numArrows = Math.min(15, Math.max(1, Math.round(totalSlope)));
+        const greenRadius = ((window as any).currentGreenRadius || 8) * 0.8; // Stay within green bounds, scale with green size
 
         for (let i = 0; i < numArrows; i++) {
           // Random position within green circle
@@ -514,9 +608,10 @@ export default function ExpoGL3DView({
       const targetDistanceFeet = data.distance; // What user set (e.g., 10ft)
       const powerPercent = data.power; // What user set (e.g., 75%)
 
-      // Calculate how far ball should actually travel (same as animation)
+      // Calculate how far ball should actually travel using centralized scaling
       const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
-      const worldUnitsPerFoot = WORLD_DISTANCE / data.holeDistance; // Use actual hole distance in feet
+      const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(data.holeDistance) : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
 
       // Aim direction (same as animation)
@@ -554,8 +649,9 @@ export default function ExpoGL3DView({
         // Calculate current speed
         const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
-        // Stop if velocity is too low or ball is off the green (same conditions as animation)
-        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > 10 || Math.abs(currentPos.z) > 10) {
+        // Stop if velocity is too low or ball is off the green (adaptive boundary)
+        const greenBoundary = currentGreenRadius * 1.2; // Use current green size
+        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > greenBoundary || Math.abs(currentPos.z) > greenBoundary) {
           break;
         }
 
@@ -607,6 +703,85 @@ export default function ExpoGL3DView({
 
     // Store reference for updates
     (window as any).updateTrajectoryVisualization = updateTrajectoryVisualization;
+
+    // Create aim line visualization (straight line without slope/green speed effects)
+    let aimLine: THREE.Line | null = null;
+    let lastAimLineState = { show: false, data: null };
+    
+    const updateAimLineVisualization = (show: boolean, data: any) => {
+      // Only update if state actually changed
+      const stateChanged =
+        show !== lastAimLineState.show ||
+        JSON.stringify(data) !== JSON.stringify(lastAimLineState.data);
+
+      if (!stateChanged) return;
+
+      lastAimLineState = { show, data };
+
+      // Remove existing aim line
+      if (aimLine) {
+        scene.remove(aimLine);
+        aimLine = null;
+      }
+
+      if (!show || !data) {
+        return;
+      }
+
+      // Create straight aim line (no slope or green speed effects)
+      const startPos = new THREE.Vector3(0, 0.12, 4); // Slightly above ball
+      
+      // Calculate aim direction
+      const aimRadians = (data.aimAngle * Math.PI) / 180;
+      const aimDirection = {
+        x: Math.sin(aimRadians),
+        z: -Math.cos(aimRadians), // Negative Z goes towards hole
+      };
+
+      // Calculate distance based on power setting
+      const targetDistanceFeet = data.distance;
+      const powerPercent = data.power;
+      const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
+      
+      // Convert to world units using centralized scaling
+      const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(data.holeDistance) : 1.0;
+      const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
+
+      // Create straight line points (no physics, no slope effects)
+      const points: THREE.Vector3[] = [];
+      const numPoints = 20; // Fewer points for straight line
+      
+      for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints;
+        const distance = intendedDistanceWorld * t;
+        
+        const x = startPos.x + (aimDirection.x * distance);
+        const y = 0.12; // Constant height
+        const z = startPos.z + (aimDirection.z * distance);
+        
+        points.push(new THREE.Vector3(x, y, z));
+      }
+
+      if (points.length < 2) {
+        return;
+      }
+
+      // Create aim line with different color (white/light blue)
+      const aimLineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const aimLineMaterial = new THREE.LineBasicMaterial({
+        color: 0x00ffff, // Cyan/light blue color - different from yellow trajectory
+        linewidth: 4,
+        transparent: true,
+        opacity: 0.8,
+      });
+
+      aimLine = new THREE.Line(aimLineGeometry, aimLineMaterial);
+      scene.add(aimLine);
+    };
+
+    // Store reference for updates
+    (window as any).updateAimLineVisualization = updateAimLineVisualization;
 
     // Create slope visualization overlay
     const createSlopeVisualization = (slopeUpDown: number, slopeLeftRight: number) => {
@@ -692,7 +867,9 @@ export default function ExpoGL3DView({
         depthWrite: false,
       });
 
-      const slopeOverlay = new THREE.Mesh(greenGeometry.clone(), slopeOverlayMaterial);
+      const currentRadius = (window as any).currentGreenRadius || 8;
+      const adaptiveOverlayGeometry = new THREE.CircleGeometry(currentRadius, 64);
+      const slopeOverlay = new THREE.Mesh(adaptiveOverlayGeometry, slopeOverlayMaterial);
       slopeOverlay.rotation.x = -Math.PI / 2;
       slopeOverlay.position.y = 0.005; // Higher above green for better visibility
       slopeOverlay.userData.isSlopeOverlay = true;
@@ -805,6 +982,7 @@ export default function ExpoGL3DView({
     fringe.rotation.x = -Math.PI / 2;
     fringe.position.y = -0.01;
     fringe.receiveShadow = true;
+    fringe.userData.isFringe = true; // Mark for updates
     scene.add(fringe);
 
     // Add distant fairway background
@@ -817,6 +995,7 @@ export default function ExpoGL3DView({
     const fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
     fairway.rotation.x = -Math.PI / 2;
     fairway.position.y = -0.02;
+    fairway.userData.isFairway = true; // Mark for updates
     scene.add(fairway);
 
     // Create golf ball (with dimpled texture)
@@ -859,13 +1038,26 @@ export default function ExpoGL3DView({
     scene.add(ball);
     ballRef.current = ball;
 
-    // DYNAMIC HOLE POSITIONING - Calculate hole position based on holeDistance
+    // CENTRALIZED SCALING FUNCTION - Used by ALL distance calculations
+    const getWorldUnitsPerFoot = (holeDistanceFeet: number) => {
+      // Adaptive world units per foot to keep hole visible while maintaining physics accuracy
+      if (holeDistanceFeet <= 10) return 1.0; // 1:1 for short putts
+      if (holeDistanceFeet <= 25) return 0.8; // 0.8:1 for medium putts
+      if (holeDistanceFeet <= 50) return 0.6; // 0.6:1 for longer putts  
+      if (holeDistanceFeet <= 100) return 0.4; // 0.4:1 for long putts
+      return 0.25; // 0.25:1 for very long putts
+    };
+    
+    // Store globally for trajectory calculations
+    (window as any).getWorldUnitsPerFoot = getWorldUnitsPerFoot;
+
+    // DYNAMIC HOLE POSITIONING - Calculate hole position using centralized scaling
     const getHolePosition = (holeDistanceFeet: number) => {
-      // Convert feet to world units: ball starts at Z=4, so hole moves back from there
-      // 8 feet = original 8 world units (ball at 4, hole at -4)
-      const worldUnitsPerFoot = 1; // 1 world unit = 1 foot
+      const worldUnitsPerFoot = getWorldUnitsPerFoot(holeDistanceFeet);
       const ballZ = 4; // Ball always starts at Z=4
       const holeZ = ballZ - holeDistanceFeet * worldUnitsPerFoot;
+      
+      console.log(`🎯 HOLE POSITIONING: ${holeDistanceFeet}ft using ${worldUnitsPerFoot} units/ft = Z position ${holeZ.toFixed(1)}`);
       return { x: 0, y: 0.001, z: holeZ };
     };
 
@@ -893,16 +1085,147 @@ export default function ExpoGL3DView({
       flagstick.userData.isHole = true;
       scene.add(flagstick);
 
-      // Create flag (positioned on flagstick)
-      const flagGeometry = new THREE.PlaneGeometry(0.8, 0.5);
-      const flagMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff0000,
+      // Create animated waving flag with simple material
+      const createWavingFlag = () => {
+        const flagWidth = 0.8;
+        const flagHeight = 0.5;
+        const segments = 16; // More segments for smooth waving
+        
+        const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight, segments, 8);
+        
+        // Store original positions for animation
+        const originalPositions = flagGeometry.attributes.position.array.slice();
+        flagGeometry.userData.originalPositions = originalPositions;
+        flagGeometry.userData.time = 0;
+        
+        return flagGeometry;
+      };
+      
+      const flagGeometry = createWavingFlag();
+      
+      // Create California bear flag texture
+      const createCaliforniaBearFlag = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d')!;
+        
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 256, 128);
+        
+        // Red stripe at bottom
+        ctx.fillStyle = '#cc0000';
+        ctx.fillRect(0, 100, 256, 28);
+        
+        // Draw simple bear silhouette
+        ctx.fillStyle = '#8B4513'; // Brown bear
+        ctx.beginPath();
+        // Bear body (simplified oval)
+        ctx.ellipse(128, 60, 40, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bear head
+        ctx.beginPath();
+        ctx.ellipse(100, 50, 18, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bear ears
+        ctx.beginPath();
+        ctx.arc(90, 40, 6, 0, Math.PI * 2);
+        ctx.arc(110, 40, 6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bear legs (simple rectangles)
+        ctx.fillRect(105, 75, 8, 15);
+        ctx.fillRect(125, 75, 8, 15);
+        ctx.fillRect(140, 75, 8, 15);
+        ctx.fillRect(155, 75, 8, 15);
+        
+        // "CALIFORNIA REPUBLIC" text
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('CALIFORNIA', 128, 25);
+        ctx.fillText('REPUBLIC', 128, 95);
+        
+        // Red star
+        ctx.fillStyle = '#cc0000';
+        const drawStar = (cx: number, cy: number, size: number) => {
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * size;
+            const y = cy + Math.sin(angle) * size;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+        };
+        drawStar(50, 30, 8);
+        
+        return new THREE.CanvasTexture(canvas);
+      };
+      
+      const californiaFlagTexture = createCaliforniaBearFlag();
+      const flagMaterial = new THREE.MeshBasicMaterial({
+        map: californiaFlagTexture,
         side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
       });
+      
       const flag = new THREE.Mesh(flagGeometry, flagMaterial);
       flag.position.set(holePos.x + 0.4, 2, holePos.z);
       flag.userData.isHole = true;
+      flag.userData.isFlag = true; // Special marker for animation
       scene.add(flag);
+
+      // Create dynamic flag shadow
+      const createFlagShadow = () => {
+        const shadowGeometry = new THREE.PlaneGeometry(0.8, 0.5, 16, 8); // Same dimensions as flag
+        const shadowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.3,
+          side: THREE.DoubleSide,
+        });
+        
+        const flagShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+        
+        // Dynamic shadow positioning based on slope
+        // Base shadow position (sun from upper front-left)
+        let shadowX = holePos.x - 0.3;
+        let shadowZ = holePos.z - 0.8;
+        
+        // Adjust shadow position based on slope to simulate light hitting uneven surface
+        // Left/Right slope affects X shadow position
+        if (puttingData.slopeLeftRight !== 0) {
+          // If green slopes right, shadow moves more left (and vice versa)
+          shadowX -= (puttingData.slopeLeftRight * 0.05); // Subtle effect
+        }
+        
+        // Up/Down slope affects Z shadow position  
+        if (puttingData.slopeUpDown !== 0) {
+          // If green slopes uphill, shadow moves forward (closer to flag base)
+          shadowZ += (puttingData.slopeUpDown * 0.08); // Subtle effect
+        }
+        
+        flagShadow.position.set(shadowX, 0.01, shadowZ);
+        flagShadow.rotation.x = -Math.PI / 2; // Lie flat on ground
+        flagShadow.userData.isHole = true;
+        flagShadow.userData.isFlagShadow = true; // Special marker for shadow animation
+        
+        // Store original positions for shadow animation
+        const originalShadowPositions = shadowGeometry.attributes.position.array.slice();
+        shadowGeometry.userData.originalPositions = originalShadowPositions;
+        
+        scene.add(flagShadow);
+        return flagShadow;
+      };
+      
+      createFlagShadow();
 
       console.log(`🕳️ Hole positioned at ${holeDistanceFeet}ft (Z: ${holePos.z})`);
       return holePos;
@@ -929,8 +1252,71 @@ export default function ExpoGL3DView({
       return newHolePos;
     };
 
+    // Green size update function for long putts
+    const updateGreenSize = (newHoleDistanceFeet: number) => {
+      // Remove existing green and fringe
+      const existingGreen = scene.children.find(child => child.userData && child.userData.isGreen);
+      const existingFringe = scene.children.find(child => child.userData && child.userData.isFringe);
+      const existingFairway = scene.children.find(child => child.userData && child.userData.isFairway);
+      
+      if (existingGreen) {
+        scene.remove(existingGreen);
+        existingGreen.geometry.dispose();
+        existingGreen.material.dispose();
+      }
+      
+      if (existingFringe) {
+        scene.remove(existingFringe);
+        existingFringe.geometry.dispose();
+        existingFringe.material.dispose();
+      }
+      
+      if (existingFairway) {
+        scene.remove(existingFairway);
+        existingFairway.geometry.dispose();
+        existingFairway.material.dispose();
+      }
+
+      // Create new adaptive green
+      const newGreenData = createAdaptiveGreen(newHoleDistanceFeet);
+      currentGreenRadius = newGreenData.radius;
+      
+      const newGreen = new THREE.Mesh(newGreenData.geometry, greenMaterial);
+      newGreen.rotation.x = -Math.PI / 2;
+      newGreen.position.y = 0;
+      newGreen.receiveShadow = true;
+      newGreen.castShadow = false;
+      newGreen.userData.isGreen = true;
+      scene.add(newGreen);
+      
+      // Update stored references
+      green = newGreen;
+      (window as any).greenMesh = newGreen;
+      (window as any).currentGreenRadius = currentGreenRadius; // Update global radius
+
+      // Create new adaptive fringe
+      const newFringeGeometry = new THREE.RingGeometry(currentGreenRadius, currentGreenRadius * 1.5, 64);
+      const newFringe = new THREE.Mesh(newFringeGeometry, fringeMaterial);
+      newFringe.rotation.x = -Math.PI / 2;
+      newFringe.position.y = -0.01;
+      newFringe.receiveShadow = true;
+      newFringe.userData.isFringe = true;
+      scene.add(newFringe);
+      
+      // Create new adaptive fairway
+      const newFairwayGeometry = new THREE.RingGeometry(currentGreenRadius * 1.5, currentGreenRadius * 2.5, 32);
+      const newFairway = new THREE.Mesh(newFairwayGeometry, fairwayMaterial);
+      newFairway.rotation.x = -Math.PI / 2;
+      newFairway.position.y = -0.02;
+      newFairway.userData.isFairway = true;
+      scene.add(newFairway);
+      
+      console.log(`🏌️ Green resized to ${currentGreenRadius.toFixed(1)} units for ${newHoleDistanceFeet}ft putt`);
+    };
+
     // Store globally for updates
     (window as any).updateHolePosition = updateHolePosition;
+    (window as any).updateGreenSize = updateGreenSize;
     (window as any).currentHolePosition = currentHolePosition;
 
     // Create realistic sky with gradient
@@ -990,8 +1376,86 @@ export default function ExpoGL3DView({
           );
         }
 
-        // DEBUGGING - trajectory disabled
-        // console.log('🎯 Trajectory disabled for debugging');
+        // Animate all flags with realistic waving motion
+        const time = Date.now() * 0.002; // Slower animation
+        scene.children.forEach(child => {
+          if (child.userData.isFlag && child.geometry) {
+            const geometry = child.geometry;
+            const positions = geometry.attributes.position;
+            const originalPositions = geometry.userData.originalPositions;
+            
+            if (originalPositions && positions) {
+              // Create realistic flag waving animation
+              for (let i = 0; i < positions.count; i++) {
+                const originalX = originalPositions[i * 3];     // X position
+                const originalY = originalPositions[i * 3 + 1]; // Y position
+                const originalZ = originalPositions[i * 3 + 2]; // Z position
+                
+                // Calculate wave based on position along flag (X axis)
+                const waveX = originalX / 0.8; // Normalize to 0-1 range
+                const waveIntensity = Math.max(0, waveX); // More wave toward the free edge
+                
+                // Create multiple wave frequencies for realistic movement
+                const wave1 = Math.sin(time * 3 + waveX * 4) * waveIntensity * 0.15;
+                const wave2 = Math.sin(time * 5 + waveX * 6) * waveIntensity * 0.08;
+                const wave3 = Math.sin(time * 7 + waveX * 8) * waveIntensity * 0.04;
+                
+                // Apply waves to Z position (depth) for realistic flutter
+                const newZ = originalZ + (wave1 + wave2 + wave3);
+                
+                // Add subtle Y movement for vertical flutter
+                const verticalWave = Math.sin(time * 4 + waveX * 3) * waveIntensity * 0.05;
+                const newY = originalY + verticalWave;
+                
+                // Update vertex position
+                positions.setXYZ(i, originalX, newY, newZ);
+              }
+              
+              // Mark positions as needing update
+              positions.needsUpdate = true;
+              
+              // Recompute normals for proper lighting
+              geometry.computeVertexNormals();
+            }
+          }
+        });
+
+        // Animate flag shadows to match flag waving
+        scene.children.forEach(child => {
+          if (child.userData.isFlagShadow && child.geometry) {
+            const geometry = child.geometry;
+            const positions = geometry.attributes.position;
+            const originalPositions = geometry.userData.originalPositions;
+            
+            if (originalPositions && positions) {
+              // Create shadow animation that follows flag motion (projected)
+              for (let i = 0; i < positions.count; i++) {
+                const originalX = originalPositions[i * 3];     // X position
+                const originalY = originalPositions[i * 3 + 1]; // Y position (always 0 for ground shadow)
+                const originalZ = originalPositions[i * 3 + 2]; // Z position
+                
+                // Calculate wave based on position along shadow (same as flag)
+                const waveX = originalX / 0.8; // Normalize to 0-1 range
+                const waveIntensity = Math.max(0, waveX); // More wave toward the free edge
+                
+                // Create shadow waves (similar to flag but flattened and projected)
+                const wave1 = Math.sin(time * 3 + waveX * 4) * waveIntensity * 0.08; // Reduced intensity for shadow
+                const wave2 = Math.sin(time * 5 + waveX * 6) * waveIntensity * 0.04;
+                const wave3 = Math.sin(time * 7 + waveX * 8) * waveIntensity * 0.02;
+                
+                // Apply shadow distortion (X and Z movement, Y stays flat)
+                const newX = originalX + (wave1 + wave2 + wave3) * 0.5; // Shadow moves slightly
+                const newZ = originalZ + (wave1 + wave2 + wave3) * 0.3; // Shadow projects
+                
+                // Update shadow vertex position (Y stays 0 for ground projection)
+                positions.setXYZ(i, newX, originalY, newZ);
+              }
+              
+              // Mark positions as needing update
+              positions.needsUpdate = true;
+            }
+          }
+        });
 
         // Clear the canvas
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1035,9 +1499,17 @@ export default function ExpoGL3DView({
       // Calculate how far ball should actually travel
       const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
 
-      // Convert to world units using actual hole distance
-      const worldUnitsPerFoot = WORLD_DISTANCE / puttingData.holeDistance; // Use actual hole distance in feet
+      // Convert to world units using centralized scaling (CRITICAL FOR PHYSICS ACCURACY)
+      const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(puttingData.holeDistance) : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
+      
+      console.log('📎 PHYSICS SCALING:', {
+        holeDistance: puttingData.holeDistance,
+        worldUnitsPerFoot: worldUnitsPerFoot.toFixed(3),
+        intendedDistanceFeet,
+        intendedDistanceWorld: intendedDistanceWorld.toFixed(2)
+      });
 
       // Aim direction
       const aimRadians = (puttingData.aimAngle * Math.PI) / 180;
@@ -1103,8 +1575,9 @@ export default function ExpoGL3DView({
         // Calculate current speed
         const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
-        // Stop if velocity is too low or ball is off the green
-        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > 10 || Math.abs(currentPos.z) > 10) {
+        // Stop if velocity is too low or ball is off the green (adaptive boundary)
+        const greenBoundary = currentGreenRadius * 1.2; // Use current green size for physics
+        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > greenBoundary || Math.abs(currentPos.z) > greenBoundary) {
           break;
         }
 
@@ -1295,6 +1768,13 @@ export default function ExpoGL3DView({
     }
   }, [showTrajectory, puttingData]);
 
+  // Handle aim line visualization changes
+  useEffect(() => {
+    if ((window as any).updateAimLineVisualization) {
+      (window as any).updateAimLineVisualization(showAimLine, puttingData);
+    }
+  }, [showAimLine, puttingData]);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -1335,7 +1815,7 @@ export default function ExpoGL3DView({
       // Scale controls zoom level
       const zoomSensitivity = 0.1;
       const scaleChange = (event.scale - 1) * zoomSensitivity;
-      setCameraRadius(prev => Math.max(4, Math.min(15, prev - scaleChange)));
+      setCameraRadius(prev => Math.max(4, Math.min(50, prev - scaleChange))); // Allow zoom out to 50 units for long putts
     })
     .onEnd(() => {
       setTimeout(() => setAutoRotate(true), 8000);
@@ -1387,21 +1867,30 @@ export default function ExpoGL3DView({
 
   const handleWheel = (event: any) => {
     if (Platform.OS === 'web') {
-      setAutoRotate(false);
-      const zoomSensitivity = 0.001;
-      setCameraRadius(prev => Math.max(4, Math.min(15, prev + event.deltaY * zoomSensitivity)));
-      setTimeout(() => setAutoRotate(true), 8000);
-      event.preventDefault();
+      // Only intercept wheel events if they're over the 3D canvas area
+      const target = event.target as HTMLElement;
+      const canvas = target.closest('canvas') || target.querySelector('canvas');
+      
+      if (canvas) {
+        setAutoRotate(false);
+        const zoomSensitivity = 0.001;
+        setCameraRadius(prev => Math.max(4, Math.min(50, prev + event.deltaY * zoomSensitivity))); // Allow zoom out to 50 units for long putts
+        setTimeout(() => setAutoRotate(true), 8000);
+        event.preventDefault();
+      }
+      // If not over canvas, let the normal scroll behavior happen
     }
   };
 
   // Add event listeners for web
   useEffect(() => {
     if (Platform.OS === 'web') {
-      const element = document.body; // or specific canvas element
+      const element = document.body;
       element.addEventListener('mousemove', handleMouseMove);
       element.addEventListener('mouseup', handleMouseUp);
-      element.addEventListener('wheel', handleWheel, { passive: false });
+      
+      // Only add wheel listener with passive: false when actually needed
+      element.addEventListener('wheel', handleWheel, { passive: true });
 
       return () => {
         element.removeEventListener('mousemove', handleMouseMove);

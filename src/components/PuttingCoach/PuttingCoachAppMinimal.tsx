@@ -29,11 +29,11 @@ const isSmallScreen = screenWidth < 480; // Phone size
 const isMediumScreen = screenWidth >= 480 && screenWidth < 768; // Small tablet
 const isLargeScreen = screenWidth >= 768; // Large tablet/desktop
 
-// Panel width based on screen size
+// Panel width based on screen size - More compact
 const getPanelWidth = () => {
-  if (isSmallScreen) return Math.min(screenWidth * 0.85, 320); // 85% width on phones, max 320px
-  if (isMediumScreen) return Math.min(screenWidth * 0.6, 400); // 60% width on small tablets
-  return Math.min(screenWidth * 0.4, 450); // 40% width on large screens, max 450px
+  if (isSmallScreen) return Math.min(screenWidth * 0.75, 280); // 75% width on phones, max 280px
+  if (isMediumScreen) return Math.min(screenWidth * 0.45, 320); // 45% width on small tablets
+  return Math.min(screenWidth * 0.3, 360); // 30% width on large screens, max 360px
 };
 
 const panelWidth = getPanelWidth();
@@ -51,6 +51,7 @@ export default function PuttingCoachAppMinimal() {
   // App state
   const [isPutting, setIsPutting] = useState(false);
   const [showTrajectory, setShowTrajectory] = useState(true); // Show trajectory by default
+  const [showAimLine, setShowAimLine] = useState(true); // Show aim line by default
   const [showControls, setShowControls] = useState(false);
   const [lastResult, setLastResult] = useState<PuttingResult | null>(null);
 
@@ -218,6 +219,7 @@ export default function PuttingCoachAppMinimal() {
           onPuttComplete={handlePuttComplete}
           isPutting={isPutting}
           showTrajectory={showTrajectory}
+          showAimLine={showAimLine}
         />
 
         {/* Floating PUTT Button - Repositioned */}
@@ -251,7 +253,7 @@ export default function PuttingCoachAppMinimal() {
                 <Text style={styles.iconText}>⚡</Text>
               </View>
               <View style={styles.distanceInfo}>
-                <Text style={styles.distanceValue}>{distance}ft</Text>
+                <Text style={styles.distanceValue}>{distance.toFixed(1)}ft</Text>
                 <Text style={styles.distanceLabel}>Putt Power</Text>
               </View>
             </View>
@@ -266,7 +268,7 @@ export default function PuttingCoachAppMinimal() {
               </View>
               <View style={styles.distanceInfo}>
                 <Text style={styles.actualDistanceValue}>
-                  {holeDistance < 1 ? `${Math.round(holeDistance * 12)}"` : `${holeDistance}ft`}
+                  {holeDistance < 1 ? `${(holeDistance * 12).toFixed(1)}"` : `${holeDistance.toFixed(1)}ft`}
                 </Text>
                 <Text style={styles.distanceLabel}>To Hole</Text>
               </View>
@@ -298,7 +300,7 @@ export default function PuttingCoachAppMinimal() {
                 <Text style={styles.slopeValue}>
                   {slopeUpDown === 0 && slopeLeftRight === 0
                     ? 'Flat'
-                    : `${slopeUpDown > 0 ? `↑${slopeUpDown}` : slopeUpDown < 0 ? `↓${Math.abs(slopeUpDown)}` : '0'}${slopeLeftRight > 0 ? ` →${slopeLeftRight}` : slopeLeftRight < 0 ? ` ←${Math.abs(slopeLeftRight)}` : ''}%`}
+                    : `${slopeUpDown > 0 ? `↑${slopeUpDown.toFixed(1)}` : slopeUpDown < 0 ? `↓${Math.abs(slopeUpDown).toFixed(1)}` : '0'}${slopeLeftRight > 0 ? ` →${slopeLeftRight.toFixed(1)}` : slopeLeftRight < 0 ? ` ←${Math.abs(slopeLeftRight).toFixed(1)}` : ''}°`}
                 </Text>
                 <Text style={styles.distanceLabel}>Slope</Text>
               </View>
@@ -316,7 +318,7 @@ export default function PuttingCoachAppMinimal() {
                   </View>
                   <View style={styles.distanceInfo}>
                     <Text style={styles.aimValue}>
-                      {aimAngle > 0 ? `${aimAngle}°` : `${Math.abs(aimAngle)}°`}
+                      {aimAngle > 0 ? `${aimAngle.toFixed(1)}°` : `${Math.abs(aimAngle).toFixed(1)}°`}
                     </Text>
                     <Text style={styles.distanceLabel}>{aimAngle > 0 ? 'Right' : 'Left'}</Text>
                   </View>
@@ -359,169 +361,166 @@ export default function PuttingCoachAppMinimal() {
               contentContainerStyle={styles.scrollContentContainer}
               showsVerticalScrollIndicator={true}
               bounces={false}
+              nestedScrollEnabled={true}
+              scrollEnabled={true}
             >
-              {/* Putt Power Control */}
-              <View style={styles.controlItem}>
-                <Text style={styles.controlLabel}>Putt Power</Text>
-                <Text style={styles.controlSubLabel}>
-                  Swing strength (3" to 200ft) - displayed in feet
-                </Text>
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleDistanceChange(-1)} // 1 inch increment
-                  >
-                    <Text style={styles.controlButtonText}>−</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleDistanceChange(-12)} // 1 foot increment
-                  >
-                    <Text style={styles.controlButtonText}>−−</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.textInput}
-                    value={distance.toFixed(2)}
-                    onChangeText={text => {
-                      const value = parseFloat(text);
-                      if (!isNaN(value)) handleDistanceSet(value);
-                    }}
-                    keyboardType="numeric"
-                    returnKeyType="done"
-                  />
-                  <Text style={styles.unitLabel}>ft</Text>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleDistanceChange(12)} // 1 foot increment
-                  >
-                    <Text style={styles.controlButtonText}>++</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleDistanceChange(1)} // 1 inch increment
-                  >
-                    <Text style={styles.controlButtonText}>+</Text>
-                  </TouchableOpacity>
+              {/* PRIMARY CONTROLS - Always Visible */}
+              <View style={styles.primarySection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>🏌️ Primary Controls</Text>
                 </View>
-                <Text style={styles.granularityHelp}>Fine: ±1" | Coarse: ±1ft</Text>
-              </View>
-
-              {/* Hole Distance Control */}
-              <View style={styles.controlItem}>
-                <Text style={styles.controlLabel}>Distance to Hole</Text>
-                <Text style={styles.controlSubLabel}>
-                  How far the ball is from the hole (6" to 150 feet)
-                </Text>
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleHoleDistanceChange(-0.5)}
-                  >
-                    <Text style={styles.controlButtonText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.controlValue}>
-                    {holeDistance < 1 ? `${Math.round(holeDistance * 12)}"` : `${holeDistance}ft`}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleHoleDistanceChange(0.5)}
-                  >
-                    <Text style={styles.controlButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Aim Control */}
-              <View style={styles.controlItem}>
-                <Text style={styles.controlLabel}>Aim</Text>
-                <Text style={styles.controlSubLabel}>
-                  Direction (-45° to +45°) in 0.25° increments
-                </Text>
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleAimChange(-1)} // 1 degree increment
-                  >
-                    <Text style={styles.controlButtonText}>←←</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleAimChange(-0.25)} // 0.25 degree increment
-                  >
-                    <Text style={styles.controlButtonText}>←</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.textInput}
-                    value={aimAngle.toString()}
-                    onChangeText={text => {
-                      const value = parseFloat(text);
-                      if (!isNaN(value)) handleAimSet(value);
-                    }}
-                    keyboardType="numeric"
-                    returnKeyType="done"
-                  />
-                  <Text style={styles.unitLabel}>°</Text>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleAimChange(0.25)} // 0.25 degree increment
-                  >
-                    <Text style={styles.controlButtonText}>→</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleAimChange(1)} // 1 degree increment
-                  >
-                    <Text style={styles.controlButtonText}>→→</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.granularityHelp}>Fine: ±0.25° | Coarse: ±1°</Text>
-              </View>
-
-              {/* Green Speed */}
-              <View style={styles.controlItem}>
-                <Text style={styles.controlLabel}>Green Speed</Text>
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleGreenSpeedChange(-0.5)}
-                  >
-                    <Text style={styles.controlButtonText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.controlValue}>{greenSpeed}</Text>
-                  <TouchableOpacity
-                    style={styles.controlButton}
-                    onPress={() => handleGreenSpeedChange(0.5)}
-                  >
-                    <Text style={styles.controlButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Slope Controls */}
-              <View style={styles.slopeSection}>
-                <Text style={styles.sectionTitle}>Slope</Text>
-
-                {/* Up/Down */}
-                <View style={styles.controlItem}>
-                  <Text style={styles.controlLabel}>Up/Down</Text>
-                  <Text style={styles.controlSubLabel}>
-                    Slope in 0.25° increments (-20° to +20°)
-                  </Text>
-                  <View style={styles.controlRow}>
+                
+                {/* Putt Power */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Putt Power</Text>
+                  <View style={styles.compactControlRow}>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleUpDownSlopeChange(-1)} // 1 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(-12)}
                     >
-                      <Text style={styles.controlButtonText}>⬇⬇</Text>
+                      <Text style={styles.compactButtonText}>−−</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleUpDownSlopeChange(-0.25)} // 0.25 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(-1)}
                     >
-                      <Text style={styles.controlButtonText}>⬇</Text>
+                      <Text style={styles.compactButtonText}>−</Text>
                     </TouchableOpacity>
                     <TextInput
-                      style={styles.textInput}
+                      style={styles.compactTextInput}
+                      value={distance.toFixed(1)}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleDistanceSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>ft</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(1)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(12)}
+                    >
+                      <Text style={styles.compactButtonText}>++</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Aim */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Aim</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(-1)}
+                    >
+                      <Text style={styles.compactButtonText}>←←</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(-0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>←</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.compactTextInput}
+                      value={aimAngle.toString()}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleAimSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>°</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>→</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(1)}
+                    >
+                      <Text style={styles.compactButtonText}>→→</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              {/* PUTTING CONFIGURATION - Grouped */}
+              <View style={styles.configSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>⚙️ Putting Configuration</Text>
+                </View>
+                
+                {/* Distance to Hole */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Distance to Hole</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleHoleDistanceChange(-0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.compactValue}>
+                      {holeDistance < 1 ? `${(holeDistance * 12).toFixed(1)}"` : `${holeDistance.toFixed(1)}ft`}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleHoleDistanceChange(0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Green Speed */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Green Speed</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleGreenSpeedChange(-0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.compactValue}>{greenSpeed}</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleGreenSpeedChange(0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Slope Up/Down */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Slope Up/Down</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(-1)}
+                    >
+                      <Text style={styles.compactButtonText}>⬇⬇</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(-0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>⬇</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.compactTextInput}
                       value={slopeUpDown.toString()}
                       onChangeText={text => {
                         const value = parseFloat(text);
@@ -530,44 +529,40 @@ export default function PuttingCoachAppMinimal() {
                       keyboardType="numeric"
                       returnKeyType="done"
                     />
-                    <Text style={styles.unitLabel}>°</Text>
+                    <Text style={styles.compactUnitLabel}>°</Text>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleUpDownSlopeChange(0.25)} // 0.25 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(0.25)}
                     >
-                      <Text style={styles.controlButtonText}>⬆</Text>
+                      <Text style={styles.compactButtonText}>⬆</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleUpDownSlopeChange(1)} // 1 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(1)}
                     >
-                      <Text style={styles.controlButtonText}>⬆⬆</Text>
+                      <Text style={styles.compactButtonText}>⬆⬆</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.granularityHelp}>Fine: ±0.25° | Coarse: ±1°</Text>
                 </View>
 
-                {/* Left/Right */}
-                <View style={styles.controlItem}>
-                  <Text style={styles.controlLabel}>Left/Right</Text>
-                  <Text style={styles.controlSubLabel}>
-                    Slope in 0.25° increments (-20° to +20°)
-                  </Text>
-                  <View style={styles.controlRow}>
+                {/* Slope Left/Right */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Slope Left/Right</Text>
+                  <View style={styles.compactControlRow}>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleLeftRightSlopeChange(-1)} // 1 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(-1)}
                     >
-                      <Text style={styles.controlButtonText}>⬅⬅</Text>
+                      <Text style={styles.compactButtonText}>⬅⬅</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleLeftRightSlopeChange(-0.25)} // 0.25 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(-0.25)}
                     >
-                      <Text style={styles.controlButtonText}>⬅</Text>
+                      <Text style={styles.compactButtonText}>⬅</Text>
                     </TouchableOpacity>
                     <TextInput
-                      style={styles.textInput}
+                      style={styles.compactTextInput}
                       value={slopeLeftRight.toString()}
                       onChangeText={text => {
                         const value = parseFloat(text);
@@ -576,69 +571,91 @@ export default function PuttingCoachAppMinimal() {
                       keyboardType="numeric"
                       returnKeyType="done"
                     />
-                    <Text style={styles.unitLabel}>°</Text>
+                    <Text style={styles.compactUnitLabel}>°</Text>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleLeftRightSlopeChange(0.25)} // 0.25 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(0.25)}
                     >
-                      <Text style={styles.controlButtonText}>➡</Text>
+                      <Text style={styles.compactButtonText}>➡</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.controlButton}
-                      onPress={() => handleLeftRightSlopeChange(1)} // 1 degree increment
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(1)}
                     >
-                      <Text style={styles.controlButtonText}>➡➡</Text>
+                      <Text style={styles.compactButtonText}>➡➡</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.granularityHelp}>Fine: ±0.25° | Coarse: ±1°</Text>
                 </View>
-              </View>
 
-              {/* Options */}
-              <View style={styles.optionsSection}>
-                <TouchableOpacity
-                  style={[styles.optionButton, showTrajectory && styles.optionButtonActive]}
-                  onPress={() => setShowTrajectory(!showTrajectory)}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      showTrajectory && styles.optionButtonActiveText,
-                    ]}
-                  >
-                    Show Path
-                  </Text>
-                </TouchableOpacity>
+                {/* Visual Options */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Visual Options</Text>
+                  <View style={styles.optionButtonsRow}>
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, showTrajectory && styles.compactOptionButtonActive]}
+                      onPress={() => setShowTrajectory(!showTrajectory)}
+                    >
+                      <Text
+                        style={[
+                          styles.compactOptionText,
+                          showTrajectory && styles.compactOptionTextActive,
+                        ]}
+                      >
+                        Path
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.optionButton, styles.testButton]}
-                  onPress={() => {
-                    console.log('🚨 EXTREME SLOPE TEST BUTTON CLICKED!');
-                    console.log('🚨 Setting EXTREME slope: +20% Up/Down');
-                    setSlopeUpDown(20); // EXTREME value that should be impossible to miss
-                    setTimeout(() => {
-                      console.log('🚨 Resetting slope to 0');
-                      setSlopeUpDown(0);
-                    }, 4000); // Longer duration to see the change
-                  }}
-                >
-                  <Text style={[styles.optionButtonText, styles.testButtonText]}>
-                    🚨 EXTREME Test
-                  </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, showAimLine && styles.compactOptionButtonActive]}
+                      onPress={() => setShowAimLine(!showAimLine)}
+                    >
+                      <Text
+                        style={[
+                          styles.compactOptionText,
+                          showAimLine && styles.compactOptionTextActive,
+                        ]}
+                      >
+                        Aim Line
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-                <TouchableOpacity style={styles.optionButton} onPress={resetStats}>
-                  <Text style={styles.optionButtonText}>Reset Stats</Text>
-                </TouchableOpacity>
+                {/* Quick Actions */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Quick Actions</Text>
+                  <View style={styles.optionButtonsRow}>
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, styles.testButton]}
+                      onPress={() => {
+                        console.log('🚨 EXTREME SLOPE TEST BUTTON CLICKED!');
+                        console.log('🚨 Setting EXTREME slope: +20% Up/Down');
+                        setSlopeUpDown(20);
+                        setTimeout(() => {
+                          console.log('🚨 Resetting slope to 0');
+                          setSlopeUpDown(0);
+                        }, 4000);
+                      }}
+                    >
+                      <Text style={[styles.compactOptionText, styles.testButtonText]}>
+                        Test
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.optionButton, styles.resetButton]}
-                  onPress={resetSettings}
-                >
-                  <Text style={[styles.optionButtonText, styles.resetButtonText]}>
-                    Reset All Settings
-                  </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity style={styles.compactOptionButton} onPress={resetStats}>
+                      <Text style={styles.compactOptionText}>Reset Stats</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, styles.resetButton]}
+                      onPress={resetSettings}
+                    >
+                      <Text style={[styles.compactOptionText, styles.resetButtonText]}>
+                        Reset All
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </ScrollView>
           </View>
@@ -838,8 +855,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    height: screenHeight, // Explicit height for proper scrolling
-    maxHeight: screenHeight,
+    height: '100vh' as any, // Use viewport height for full screen coverage
     // Width is now dynamic based on screen size
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
     shadowColor: '#000',
@@ -853,26 +869,25 @@ const styles = StyleSheet.create({
   },
   scrollableContent: {
     flex: 1,
-    height: screenHeight - (Platform.OS === 'ios' && isSmallScreen ? 100 : 80), // Account for header height
-    maxHeight: screenHeight - (Platform.OS === 'ios' && isSmallScreen ? 100 : 80),
-    overflowY: 'scroll' as any, // Force scrolling on web
+    overflow: 'auto' as any, // Allow scrolling when needed
+    backgroundColor: 'transparent',
   },
   scrollContentContainer: {
-    paddingBottom: 80, // Large bottom padding to ensure all content is accessible
+    paddingBottom: 20, // Reduced bottom padding to remove white space
     paddingTop: 10,
   },
   panelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingHorizontal: isSmallScreen ? 12 : 16, // Reduced padding
     paddingTop: Platform.OS === 'ios' && isSmallScreen ? 50 : 20,
-    paddingBottom: 15,
+    paddingBottom: 12, // Reduced padding
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    height: Platform.OS === 'ios' && isSmallScreen ? 100 : 80, // Fixed height
+    height: Platform.OS === 'ios' && isSmallScreen ? 95 : 75, // Reduced height
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    flexShrink: 0, // Don't shrink the header
+    flexShrink: 0,
   },
   panelTitle: {
     fontSize: 20,
@@ -1019,5 +1034,113 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  
+  // New compact styles
+  primarySection: {
+    backgroundColor: '#f8f9fa',
+    marginBottom: 8,
+  },
+  configSection: {
+    backgroundColor: 'white',
+  },
+  sectionHeader: {
+    backgroundColor: '#e9ecef',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#495057',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  compactControlItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f9fa',
+  },
+  compactControlLabel: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  compactControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  compactButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  compactTextInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minWidth: 50,
+    maxWidth: 60,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#212529',
+  },
+  compactUnitLabel: {
+    fontSize: 11,
+    color: '#6c757d',
+    fontWeight: '500',
+    minWidth: 15,
+  },
+  compactValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#212529',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  optionButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  compactOptionButton: {
+    backgroundColor: '#e9ecef',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 60,
+  },
+  compactOptionButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  compactOptionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  compactOptionTextActive: {
+    color: 'white',
   },
 });
