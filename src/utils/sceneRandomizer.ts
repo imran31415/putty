@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: RandomizationConfig = {
   maxRadius: 5.0,
   excludeAngles: [
     { start: -45, end: 45 }, // Don't place spectators directly behind the ball path
+    { start: 165, end: 195 }, // Don't place spectators between ball and hole
   ],
 };
 
@@ -97,8 +98,15 @@ function generateRandomPositions(
     
     // Find a valid angle that's not too close to existing spectators
     do {
-      // Generate angle between 60 and 300 degrees (avoiding directly behind ball)
-      angle = 60 + random() * 240;
+      // Generate angle avoiding excluded zones (not between ball and hole)
+      // Valid zones: 30-165 degrees (left side) and 195-330 degrees (right side)
+      if (random() < 0.5) {
+        // Left side of the green
+        angle = 30 + random() * 135; // 30 to 165 degrees
+      } else {
+        // Right side of the green
+        angle = 195 + random() * 135; // 195 to 330 degrees
+      }
       attempts++;
     } while (
       attempts < 20 &&

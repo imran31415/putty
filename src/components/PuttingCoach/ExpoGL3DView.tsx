@@ -12,6 +12,7 @@ import { GLView } from 'expo-gl';
 import { Renderer, TextureLoader } from 'expo-three';
 import * as THREE from 'three';
 import { PuttingResult } from './PuttingPhysics';
+import { FlightResult, SwingData, SwingPhysics } from './SwingPhysics';
 import { 
   getChallengeModeSpectatorConfig, 
   getPracticeModeSpectatorConfig 
@@ -29,16 +30,20 @@ interface PuttingData {
 
 interface ExpoGL3DViewProps {
   puttingData: PuttingData;
+  swingData?: SwingData;
+  gameMode: 'putt' | 'swing';
   isPutting: boolean;
   showTrajectory: boolean;
   showAimLine: boolean;
-  onPuttComplete: (result: PuttingResult) => void;
+  onPuttComplete: (result: PuttingResult | FlightResult) => void;
   currentLevel?: number | null;
   challengeAttempts?: number;
 }
 
 export default function ExpoGL3DView({
   puttingData,
+  swingData,
+  gameMode = 'putt',
   isPutting,
   showTrajectory,
   showAimLine,
@@ -2697,10 +2702,145 @@ export default function ExpoGL3DView({
     render();
   };
 
-  // Handle putting animation
+  // Animate swing trajectory
+  const animateSwingTrajectory = (flightResult: FlightResult) => {
+    if (!ballRef.current || !sceneRef.current) return;
+    
+    const ball = ballRef.current;
+    const scene = sceneRef.current;
+    const trajectory = flightResult.trajectory;
+    
+    if (trajectory.length === 0) {
+      setIsAnimating(false);
+      onPuttComplete(flightResult);
+      return;
+    }
+    
+    // Create trail for ball flight
+    const trailGeometry = new THREE.BufferGeometry();
+    const trailMaterial = new THREE.LineBasicMaterial({
+      color: 0xffff00,
+      opacity: 0.6,
+      transparent: true,
+    });
+    const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+    scene.add(trailLine);
+    
+    // Animate player robot swing
+    const playerRobot = (window as any).playerRobot;
+    if (playerRobot) {
+      // Quick swing animation
+      const originalRotation = playerRobot.rotation.z;
+      let swingTime = 0;
+      const swingDuration = 0.4;
+      
+      const animateSwing = () => {
+        swingTime += 0.016;
+        if (swingTime < swingDuration) {
+          const progress = swingTime / swingDuration;
+          // Backswing then follow through
+          if (progress < 0.3) {
+            playerRobot.rotation.z = originalRotation - (progress / 0.3) * 0.5;
+          } else {
+            playerRobot.rotation.z = originalRotation - 0.5 + ((progress - 0.3) / 0.7) * 1.0;
+          }
+          requestAnimationFrame(animateSwing);
+        } else {
+          playerRobot.rotation.z = originalRotation;
+        }
+      };
+      animateSwing();
+    }
+    
+    // Animate ball along trajectory
+    let currentIndex = 0;
+    const animationSpeed = 2; // Points per frame
+    const trailPoints: THREE.Vector3[] = [];
+    
+    // Convert trajectory to world coordinates
+    // The putting green uses approximately 1 world unit = 3 feet
+    // Trajectory points are in yards, need to convert to feet then to world units
+    const worldTrajectory = trajectory.map(point => {
+      // Convert yards to feet (1 yard = 3 feet)
+      const feetX = point.x * 3;
+      const feetY = point.y; // Already in feet
+      const feetZ = point.z * 3;
+      
+      // Convert feet to world units (1 world unit ≈ 3 feet)
+      // This matches the putting scale where hole is at z=0 and ball starts at z=4
+      const worldX = feetX / 3;
+      const worldY = feetY / 3;
+      const worldZ = -(feetZ / 3); // Negative Z goes toward hole
+      
+      return new THREE.Vector3(worldX, worldY + 0.08, worldZ + 4); // Start from ball position
+    });
+    
+    const animateFlight = () => {
+      if (currentIndex < worldTrajectory.length) {
+        const point = worldTrajectory[currentIndex];
+        
+        // Update ball position
+        ball.position.copy(point);
+        
+        // Add to trail
+        trailPoints.push(point.clone());
+        if (trailPoints.length > 20) trailPoints.shift(); // Keep trail short
+        
+        // Update trail line
+        if (trailPoints.length > 1) {
+          trailGeometry.setFromPoints(trailPoints);
+        }
+        
+        // Update camera to follow ball for long shots
+        // If the ball goes beyond the green (past the hole), adjust camera
+        if (ball.position.z < -10 || Math.abs(ball.position.x) > 20) {
+          const camera = (window as any).camera;
+          if (camera) {
+            // Pan camera to follow ball for shots that leave the green
+            camera.lookAt(ball.position);
+          }
+        }
+        
+        currentIndex += animationSpeed;
+        requestAnimationFrame(animateFlight);
+      } else {
+        // Animation complete
+        setTimeout(() => {
+          scene.remove(trailLine);
+          setIsAnimating(false);
+          onPuttComplete(flightResult);
+          
+          // Reset ball position
+          ball.position.set(0, 0.08, 4);
+          
+          // Reset camera to original position
+          const camera = (window as any).camera;
+          if (camera) {
+            camera.position.set(0, 5, 8);
+            camera.lookAt(0, 0, 0);
+          }
+        }, 1000);
+      }
+    };
+    
+    animateFlight();
+  };
+  
+  // Handle putting/swinging animation
   useEffect(() => {
     if (isPutting && !isAnimating && ballRef.current) {
       setIsAnimating(true);
+      
+      // Check if we're in swing mode
+      if (gameMode === 'swing' && swingData) {
+        // Use SwingPhysics
+        const swingPhysics = new SwingPhysics(swingData);
+        const flightResult = swingPhysics.calculateBallFlight();
+        
+        // Animate the ball through the flight trajectory
+        animateSwingTrajectory(flightResult);
+        return;
+      }
       
       // Animate player robot putting stroke
       const playerRobot = (window as any).playerRobot;
@@ -2846,7 +2986,7 @@ export default function ExpoGL3DView({
         const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
         // Stop if velocity is too low or ball is off the green (adaptive boundary)
-        const greenBoundary = currentGreenRadius * 1.2; // Use current green size for physics
+        const greenBoundary = ((window as any).currentGreenRadius || 8) * 1.2; // Use current green size for physics
         if (currentSpeed < 0.05 || Math.abs(currentPos.x) > greenBoundary || Math.abs(currentPos.z) > greenBoundary) {
           break;
         }
@@ -3519,7 +3659,7 @@ export default function ExpoGL3DView({
           // );
 
           // Check final position for success - must be in hole and not have bounced out
-          const success = distanceToHole <= 0.12 && ballRef.current.visible === false; // Only success if ball disappeared
+          const success = distanceToHole <= 0.12 && ballRef.current?.visible === false; // Only success if ball disappeared
           const accuracy = Math.max(0, 100 - (distanceToHole / 2.0) * 100); // More forgiving accuracy calculation
 
           const actualRollDistance =
@@ -3664,7 +3804,7 @@ export default function ExpoGL3DView({
 
       animateBall();
     }
-  }, [isPutting, isAnimating, puttingData, onPuttComplete]);
+  }, [isPutting, isAnimating, puttingData, onPuttComplete, gameMode, swingData]);
 
   // Handle trajectory visualization changes
   useEffect(() => {
@@ -3730,7 +3870,7 @@ export default function ExpoGL3DView({
 
   // Web-compatible mouse controls
   const handleMouseDown = (event: any) => {
-    if (Platform.OS === 'web' && cameraMode) {
+    if (Platform.OS === 'web') {
       setAutoRotate(false);
       setIsDragging(true);
       setLastPointer({

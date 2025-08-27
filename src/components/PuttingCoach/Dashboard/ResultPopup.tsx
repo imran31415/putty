@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { PuttingResult } from '../../PuttingPhysics';
+import { PuttingResult } from '../PuttingPhysics';
 import { getCloseMessage } from '../../../utils/messageHelpers';
 
 interface ResultPopupProps {
