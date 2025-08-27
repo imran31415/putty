@@ -29,6 +29,7 @@ interface ExpoGL3DViewProps {
   showTrajectory: boolean;
   showAimLine: boolean;
   onPuttComplete: (result: PuttingResult) => void;
+  currentLevel?: number | null;
 }
 
 export default function ExpoGL3DView({
@@ -37,6 +38,7 @@ export default function ExpoGL3DView({
   showTrajectory,
   showAimLine,
   onPuttComplete,
+  currentLevel = null,
 }: ExpoGL3DViewProps) {
   const rendererRef = useRef<Renderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -64,9 +66,9 @@ export default function ExpoGL3DView({
     const ballZ = 4;
     const holeZ = ballZ - (distanceFeet * worldUnitsPerFoot);
     const totalSceneDepth = Math.abs(ballZ - holeZ);
-    const requiredRadius = totalSceneDepth * 0.8;
+    const requiredRadius = totalSceneDepth * 1.8; // Increased to 1.8 for much better visibility
     
-    return Math.max(BASE_RADIUS, requiredRadius);
+    return Math.max(BASE_RADIUS, Math.min(requiredRadius, 40));
   };
   
   const [cameraRadius, setCameraRadius] = useState(() => getInitialCameraRadius(puttingData.holeDistance));
@@ -142,9 +144,9 @@ export default function ExpoGL3DView({
       const totalSceneDepth = Math.abs(ballZ - holeZ); // Total Z distance from ball to hole
       
       // Camera needs to see from ball (Z=4) to hole (Z=holeZ)
-      // Add 20% margin for comfortable viewing
-      const requiredRadius = totalSceneDepth * 0.8; // Camera radius to see full scene
-      const newRadius = Math.max(BASE_RADIUS, requiredRadius);
+      // Further increase multiplier to ensure hole is always fully visible
+      const requiredRadius = totalSceneDepth * 1.8; // Increased to 1.8 for much better visibility
+      const newRadius = Math.max(BASE_RADIUS, Math.min(requiredRadius, 40)); // Increased cap to 40
       
       // Camera zoom calculated based on hole position
       
@@ -184,7 +186,8 @@ export default function ExpoGL3DView({
       100
     );
     camera.position.set(0, 8, 12);
-    camera.lookAt(0, 0, 0);
+    // Start looking slightly down for better framing
+    camera.lookAt(0, -0.5, 0);
     cameraRef.current = camera;
 
     // Enhanced professional lighting setup with realistic golf course lighting
@@ -621,15 +624,15 @@ export default function ExpoGL3DView({
 
           // Apply 4-directional slope effects (EXACT same as animation)
           if (currentSpeed > 0.01) {
-            // Left/Right slope affects ball curve (X direction)
+            // Left/Right slope affects ball curve (X direction) - MORE DRAMATIC
             if (data.slopeLeftRight !== 0) {
-              const curveFactor = data.slopeLeftRight * 0.025;
+              const curveFactor = data.slopeLeftRight * 0.12; // Massively increased from 0.025 for more curve
               velocity.x += curveFactor * deltaTime;
             }
 
-            // Up/Down slope affects continuous rolling speed
+            // Up/Down slope affects continuous rolling speed - MORE DRAMATIC
             if (data.slopeUpDown !== 0) {
-              const speedEffect = -data.slopeUpDown * 0.001;
+              const speedEffect = -data.slopeUpDown * 0.005; // Increased from 0.001 for more effect
               velocity.x += velocity.x * speedEffect * deltaTime;
               velocity.z += velocity.z * speedEffect * deltaTime;
             }
@@ -1162,8 +1165,32 @@ export default function ExpoGL3DView({
       
       createFlagShadow();
 
+      // Determine which robots to show based on level (add variety)
+      const levelConfig = currentLevel ? {
+        showFemaleRobot: currentLevel % 2 === 1 || currentLevel === 2, // Levels 1, 2, 3, 5
+        showPuttingRobot: currentLevel !== 4 && currentLevel !== 6, // Not in levels 4, 6
+        showCooler: currentLevel >= 3, // Levels 3+
+        femaleRobotOffset: {
+          x: currentLevel === 1 ? 2.0 : currentLevel === 3 ? 2.5 : currentLevel === 5 ? 1.5 : 2.0,
+          z: currentLevel === 1 ? -0.5 : currentLevel === 3 ? -1.0 : currentLevel === 5 ? 0 : -0.5
+        },
+        puttingRobotOffset: {
+          x: currentLevel === 2 ? -2.5 : currentLevel === 3 ? -1.5 : -2.0,
+          z: currentLevel === 2 ? -1.5 : currentLevel === 3 ? -0.5 : -1.0
+        }
+      } : {
+        // Default config for practice mode
+        showFemaleRobot: true,
+        showPuttingRobot: true,
+        showCooler: true,
+        femaleRobotOffset: { x: 2.0, z: -0.5 },
+        puttingRobotOffset: { x: -2.0, z: -1.0 }
+      };
+
       // Create 2D/pseudo-3D humanoid robot avatar for distance reference
       const createRobotAvatar = () => {
+        // Only create if enabled for this level
+        if (!levelConfig.showFemaleRobot) return;
         // Create female robot with cute golf outfit
         const createRobotTexture = () => {
           const canvas = document.createElement('canvas');
@@ -1423,9 +1450,9 @@ export default function ExpoGL3DView({
         
         const robot = new THREE.Sprite(robotMaterial);
         
-        // Calculate robot position (closer to center)
-        const robotOffsetX = 2.0; // Right side of hole, closer to center
-        const robotOffsetZ = -0.5; // Slightly in front of hole
+        // Calculate robot position based on level config
+        const robotOffsetX = levelConfig.femaleRobotOffset.x;
+        const robotOffsetZ = levelConfig.femaleRobotOffset.z;
         
         // Base size of robot (will be scaled based on distance)
         const baseHeight = 2.0; // 2 units tall (about human height in golf scale)
@@ -1493,6 +1520,8 @@ export default function ExpoGL3DView({
       
       // Create second robot in putting stance (side view)
       const createPuttingRobot = () => {
+        // Only create if enabled for this level
+        if (!levelConfig.showPuttingRobot) return;
         // Create side-view putting robot texture
         const createPuttingRobotTexture = () => {
           const canvas = document.createElement('canvas');
@@ -1745,9 +1774,9 @@ export default function ExpoGL3DView({
         
         const puttingRobot = new THREE.Sprite(puttingRobotMaterial);
         
-        // Position on the opposite side of the hole from the first robot
-        const puttingRobotOffsetX = -2.0; // Left side of hole, closer to center
-        const puttingRobotOffsetZ = -1.0; // In front of hole
+        // Position based on level config
+        const puttingRobotOffsetX = levelConfig.puttingRobotOffset.x;
+        const puttingRobotOffsetZ = levelConfig.puttingRobotOffset.z;
         
         puttingRobot.position.set(
           holePos.x + puttingRobotOffsetX,
@@ -1788,6 +1817,8 @@ export default function ExpoGL3DView({
       
       // Create cooler with beers and passed out frat robot
       const createCoolerAndFratRobot = () => {
+        // Only create if enabled for this level
+        if (!levelConfig.showCooler) return;
         // Create cooler sprite
         const createCoolerTexture = () => {
           const canvas = document.createElement('canvas');
@@ -2253,6 +2284,105 @@ export default function ExpoGL3DView({
     const currentHolePosition = createHole(puttingData.holeDistance);
     (window as any).currentHolePosition = currentHolePosition;
 
+    // Create flying blimp with "BAD YEAR" text
+    const createBlimp = () => {
+      // Create blimp body (ellipsoid shape)
+      const blimpGeometry = new THREE.SphereGeometry(3, 32, 16);
+      blimpGeometry.scale(1, 0.4, 0.4); // Stretch to blimp shape
+      
+      const blimpMaterial = new THREE.MeshPhongMaterial({
+        color: 0x8b0000, // Dark red
+        emissive: 0x400000,
+        emissiveIntensity: 0.2,
+      });
+      
+      const blimpBody = new THREE.Mesh(blimpGeometry, blimpMaterial);
+      blimpBody.position.set(0, 15, -20); // High in the sky
+      blimpBody.rotation.y = Math.PI / 4;
+      blimpBody.userData.isBlimp = true;
+      scene.add(blimpBody);
+      
+      // Create "BAD YEAR" text on blimp
+      const createBlimpText = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d')!;
+        
+        // Clear with transparency
+        ctx.clearRect(0, 0, 512, 128);
+        
+        // Draw text
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('BAD YEAR', 256, 64);
+        
+        const textTexture = new THREE.CanvasTexture(canvas);
+        const textMaterial = new THREE.SpriteMaterial({
+          map: textTexture,
+          transparent: true,
+          depthWrite: false,
+        });
+        
+        const textSprite = new THREE.Sprite(textMaterial);
+        textSprite.scale.set(6, 1.5, 1);
+        textSprite.position.set(0, 15, -19.5); // Just in front of blimp
+        textSprite.userData.isBlimp = true;
+        scene.add(textSprite);
+        
+        return textSprite;
+      };
+      
+      const blimpText = createBlimpText();
+      
+      // Create particle trail system
+      const particleCount = 50;
+      const particles = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const colors = new Float32Array(particleCount * 3);
+      
+      for (let i = 0; i < particleCount; i++) {
+        // Initialize behind blimp
+        positions[i * 3] = blimpBody.position.x - 3 - Math.random() * 5;
+        positions[i * 3 + 1] = blimpBody.position.y + (Math.random() - 0.5) * 2;
+        positions[i * 3 + 2] = blimpBody.position.z + (Math.random() - 0.5) * 2;
+        
+        // Smoke color (greyish)
+        const intensity = 0.5 + Math.random() * 0.5;
+        colors[i * 3] = intensity;
+        colors[i * 3 + 1] = intensity;
+        colors[i * 3 + 2] = intensity;
+      }
+      
+      particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      const particleMaterial = new THREE.PointsMaterial({
+        size: 0.3,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+      });
+      
+      const particleSystem = new THREE.Points(particles, particleMaterial);
+      particleSystem.userData.isBlimp = true;
+      scene.add(particleSystem);
+      
+      // Store references for animation
+      (window as any).blimp = {
+        body: blimpBody,
+        text: blimpText,
+        particles: particleSystem,
+        particlePositions: positions,
+        time: 0,
+      };
+    };
+    
+    createBlimp();
+
     // Store hole update function
     const updateHolePosition = (newHoleDistanceFeet: number) => {
       // Remove existing hole elements
@@ -2411,7 +2541,49 @@ export default function ExpoGL3DView({
         const x = Math.sin(cameraAngle) * cameraRadius;
         const z = Math.cos(cameraAngle) * cameraRadius;
         cameraRef.current.position.set(x, cameraHeight, z);
-        cameraRef.current.lookAt(0, 0, 0);
+        
+        // Adjust look-at target based on distance to prevent dashboard clipping
+        const lookAtY = puttingData.holeDistance > 20 ? -2 : puttingData.holeDistance > 10 ? -1 : 0; // Look progressively lower for longer putts
+        cameraRef.current.lookAt(0, lookAtY, -2);
+        
+        // Animate blimp
+        if ((window as any).blimp) {
+          const blimp = (window as any).blimp;
+          blimp.time += 0.005;
+          
+          // Slow circular motion
+          const radius = 25;
+          const height = 15 + Math.sin(blimp.time * 0.5) * 2; // Gentle bobbing
+          blimp.body.position.x = Math.cos(blimp.time) * radius;
+          blimp.body.position.y = height;
+          blimp.body.position.z = Math.sin(blimp.time) * radius - 10;
+          
+          // Keep text aligned with blimp
+          blimp.text.position.x = blimp.body.position.x;
+          blimp.text.position.y = blimp.body.position.y;
+          blimp.text.position.z = blimp.body.position.z + 0.5;
+          
+          // Rotate blimp to face direction of movement
+          blimp.body.rotation.y = -blimp.time + Math.PI / 2;
+          
+          // Update particle trail
+          const positions = blimp.particles.geometry.attributes.position.array;
+          const particleCount = positions.length / 3;
+          
+          // Shift particles back and add new ones at blimp position
+          for (let i = particleCount - 1; i > 0; i--) {
+            positions[i * 3] = positions[(i - 1) * 3];
+            positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
+            positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
+          }
+          
+          // Add new particle at blimp position with some randomness
+          positions[0] = blimp.body.position.x - Math.cos(blimp.body.rotation.y) * 3;
+          positions[1] = blimp.body.position.y + (Math.random() - 0.5) * 0.5;
+          positions[2] = blimp.body.position.z - Math.sin(blimp.body.rotation.y) * 3;
+          
+          blimp.particles.geometry.attributes.position.needsUpdate = true;
+        }
 
         // SLOPE UPDATES NOW HANDLED BY useEffect - MUCH SIMPLER!
 
@@ -2621,10 +2793,10 @@ export default function ExpoGL3DView({
       // Positive slopeUpDown = uphill = slower (reduce speed)
       // Negative slopeUpDown = downhill = faster (increase speed)
       if (puttingData.slopeUpDown !== 0) {
-        // Each 1% slope changes speed by 3%
-        speedMultiplier = 1.0 - puttingData.slopeUpDown * 0.03;
-        // Clamp to reasonable range (50% to 200% of normal speed)
-        speedMultiplier = Math.max(0.5, Math.min(2.0, speedMultiplier));
+        // Each 1% slope changes speed by 6% - MORE DRAMATIC
+        speedMultiplier = 1.0 - puttingData.slopeUpDown * 0.06; // Doubled from 0.03
+        // Clamp to reasonable range (25% to 300% of normal speed) - wider range
+        speedMultiplier = Math.max(0.25, Math.min(3.0, speedMultiplier));
       }
 
       // Base speed calculation
@@ -2696,7 +2868,7 @@ export default function ExpoGL3DView({
             if (puttingData.slopeLeftRight !== 0) {
               // Positive slopeLeftRight = right slope = ball curves right
               // Negative slopeLeftRight = left slope = ball curves left
-              const curveFactor = puttingData.slopeLeftRight * 0.025; // Strong curve effect
+              const curveFactor = puttingData.slopeLeftRight * 0.12; // MASSIVELY DRAMATIC curve effect
               velocity.x += curveFactor * deltaTime;
 
               // console.log('↔️ Left/Right slope applied:', {
@@ -2709,7 +2881,7 @@ export default function ExpoGL3DView({
             // Up/Down slope affects continuous rolling speed (additional effect beyond initial speed)
             if (puttingData.slopeUpDown !== 0) {
               // Uphill = additional deceleration, Downhill = less deceleration
-              const speedEffect = -puttingData.slopeUpDown * 0.001; // Small continuous effect
+              const speedEffect = -puttingData.slopeUpDown * 0.005; // MUCH STRONGER continuous effect
               velocity.x += velocity.x * speedEffect * deltaTime;
               velocity.z += velocity.z * speedEffect * deltaTime;
 
@@ -2757,9 +2929,65 @@ export default function ExpoGL3DView({
           //   distanceToHole.toFixed(3)
           // );
 
-          // Only count as success if ball is very close to hole center (hole radius is 0.15)
-          if (distanceToHole <= 0.12) {
-            // Stricter success criteria
+          // Get current ball speed for collision detection
+          const currentSpeed = currentStep > 0 ? 
+            trajectory[currentStep].distanceTo(trajectory[currentStep - 1]) / 0.05 : 0;
+          
+          // Flag collision - if ball is going too fast and hits the center
+          const flagstickRadius = 0.02; // Flagstick radius
+          const distanceToFlagstick = Math.sqrt(currentPos.x * currentPos.x + (currentPos.z - currentHolePos.z) * (currentPos.z - currentHolePos.z));
+          
+          if (distanceToFlagstick <= flagstickRadius && currentSpeed > 0.8) {
+            // Ball hit the flag at high speed - bounce out!
+            // Deflect the ball away
+            const bounceDirection = new THREE.Vector3(
+              currentPos.x > 0 ? 1 : -1,
+              0,
+              1
+            ).normalize();
+            
+            // Add bounce trajectory
+            for (let i = 1; i <= 10; i++) {
+              const bouncePos = currentPos.clone();
+              bouncePos.x += bounceDirection.x * i * 0.05;
+              bouncePos.z += bounceDirection.z * i * 0.05;
+              trajectory.push(bouncePos);
+            }
+            
+            // Continue animation to show bounce
+            currentStep++;
+            requestAnimationFrame(animateBall);
+            return;
+          }
+          
+          // Lip-out detection - ball is on edge and going fast
+          const isOnLipEdge = distanceToHole > 0.08 && distanceToHole <= 0.15; // On the edge of hole
+          if (isOnLipEdge && currentSpeed > 0.5) {
+            // Ball lips out!
+            // Calculate lip-out direction (perpendicular to hole entry)
+            const lipOutDirection = new THREE.Vector3(
+              currentPos.x - currentHolePos.x,
+              0,
+              currentPos.z - currentHolePos.z
+            ).normalize();
+            
+            // Add lip-out trajectory
+            for (let i = 1; i <= 15; i++) {
+              const lipPos = currentPos.clone();
+              const decay = Math.exp(-i * 0.1); // Exponential decay
+              lipPos.x += lipOutDirection.x * i * 0.03 * decay;
+              lipPos.z += lipOutDirection.z * i * 0.03 * decay;
+              trajectory.push(lipPos);
+            }
+            
+            // Continue animation to show lip-out
+            currentStep++;
+            requestAnimationFrame(animateBall);
+            return;
+          }
+          
+          // Only count as success if ball is very close to hole center and going slow enough
+          if (distanceToHole <= 0.12 && currentSpeed < 0.8) {
             // Ball goes in hole - make it disappear
             ballRef.current.visible = false;
 
@@ -3298,8 +3526,8 @@ export default function ExpoGL3DView({
           //   distanceToHole.toFixed(3)
           // );
 
-          // Check final position for success (backup check)
-          const success = distanceToHole <= 0.12;
+          // Check final position for success - must be in hole and not have bounced out
+          const success = distanceToHole <= 0.12 && ballRef.current.visible === false; // Only success if ball disappeared
           const accuracy = Math.max(0, 100 - (distanceToHole / 2.0) * 100); // More forgiving accuracy calculation
 
           const actualRollDistance =

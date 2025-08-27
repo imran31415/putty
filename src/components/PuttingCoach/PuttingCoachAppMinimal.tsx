@@ -22,6 +22,108 @@ interface PuttingStats {
   totalDistance: number;
 }
 
+interface UserSession {
+  completedLevels: number[];
+  bankBalance: number;
+  currentStreak: number;
+  totalEarnings: number;
+}
+
+interface LevelConfig {
+  id: number;
+  name: string;
+  description: string;
+  introText: string;
+  holeDistance: number;
+  slopeUpDown: number;
+  slopeLeftRight: number;
+  greenSpeed: number;
+  reward: number;
+  unlockRequirement?: number; // Previous level that must be completed
+  sceneTheme?: 'default' | 'sunset' | 'night' | 'golden';
+}
+
+// Extensible level configurations
+const LEVEL_CONFIGS: LevelConfig[] = [
+  {
+    id: 1,
+    name: 'Slope Master',
+    description: '5ft putt • Heavy slope • Adjust your aim!',
+    introText: '⛰️ Master the slopes! This short putt has a deceiving uphill climb with a strong left break.',
+    holeDistance: 5,
+    slopeUpDown: 8,
+    slopeLeftRight: -6,
+    greenSpeed: 11,
+    reward: 100,
+    sceneTheme: 'default'
+  },
+  {
+    id: 2,
+    name: "Tiger's Masters",
+    description: '43ft putt • Lightning fast • 2019 Masters 16th',
+    introText: "", // Removed tooltip
+    holeDistance: 43,
+    slopeUpDown: -12,
+    slopeLeftRight: 5,
+    greenSpeed: 13,
+    reward: 200,
+    unlockRequirement: 1,
+    sceneTheme: 'sunset'
+  },
+  {
+    id: 3,
+    name: 'The Sidewinder',
+    description: '15ft putt • Double break • Read the green!',
+    introText: '🐍 This tricky 15-footer breaks hard right then left. A true test of green reading!',
+    holeDistance: 15,
+    slopeUpDown: 3,
+    slopeLeftRight: -8,
+    greenSpeed: 9,
+    reward: 150,
+    unlockRequirement: 2,
+    sceneTheme: 'default'
+  },
+  {
+    id: 4,
+    name: 'Lag Master',
+    description: '65ft putt • Slow green • Distance control!',
+    introText: '🎯 A monster 65-foot lag putt on a slow green. Focus on distance control over line!',
+    holeDistance: 65,
+    slopeUpDown: -5,
+    slopeLeftRight: 2,
+    greenSpeed: 7,
+    reward: 250,
+    unlockRequirement: 3,
+    sceneTheme: 'night'
+  },
+  {
+    id: 5,
+    name: 'Tournament Pressure',
+    description: '12ft putt • To win! • Handle the pressure',
+    introText: '🏆 12 feet to win the tournament! Slightly downhill with a subtle right break. Can you handle the pressure?',
+    holeDistance: 12,
+    slopeUpDown: -3,
+    slopeLeftRight: 3,
+    greenSpeed: 11,
+    reward: 300,
+    unlockRequirement: 4,
+    sceneTheme: 'golden'
+  },
+  {
+    id: 6,
+    name: 'The Volcano',
+    description: '8ft putt • Severe uphill • Maximum power!',
+    introText: '🌋 An 8-foot putt that plays like 15! Severe uphill with a crown that deflects weak putts.',
+    holeDistance: 8,
+    slopeUpDown: 15,
+    slopeLeftRight: -2,
+    greenSpeed: 10,
+    reward: 200,
+    unlockRequirement: 5,
+    sceneTheme: 'sunset'
+  }
+];
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Responsive panel dimensions
@@ -54,6 +156,25 @@ export default function PuttingCoachAppMinimal() {
   const [showAimLine, setShowAimLine] = useState(true); // Show aim line by default
   const [showControls, setShowControls] = useState(false);
   const [lastResult, setLastResult] = useState<PuttingResult | null>(null);
+  
+  // Challenge mode state
+  const [isChallengMode, setIsChallengMode] = useState(false);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
+  const [currentLevel, setCurrentLevel] = useState<number | null>(null);
+  const [challengeAttempts, setChallengeAttempts] = useState(0);
+  const [challengeComplete, setChallengeComplete] = useState(false);
+  const [showChallengeIntro, setShowChallengeIntro] = useState(false);
+  const [challengeIntroText, setChallengeIntroText] = useState('');
+  const [showRewardAnimation, setShowRewardAnimation] = useState(false);
+  const [lastReward, setLastReward] = useState(0);
+
+  // User session state - Persistent game progress
+  const [userSession, setUserSession] = useState<UserSession>({
+    completedLevels: [],
+    bankBalance: 0,
+    currentStreak: 0,
+    totalEarnings: 0,
+  });
 
   // Statistics
   const [stats, setStats] = useState<PuttingStats>({
@@ -145,15 +266,42 @@ export default function PuttingCoachAppMinimal() {
     setIsPutting(false);
     setLastResult(result);
 
-    // Update statistics
-    setStats(prev => ({
-      attempts: prev.attempts + 1,
-      makes: prev.makes + (result.success ? 1 : 0),
-      averageAccuracy:
-        (prev.averageAccuracy * prev.attempts + result.accuracy) / (prev.attempts + 1),
-      bestAccuracy: Math.max(prev.bestAccuracy, result.accuracy),
-      totalDistance: prev.totalDistance + result.rollDistance,
-    }));
+    // Handle challenge mode
+    if (isChallengMode && currentLevel !== null) {
+      setChallengeAttempts(prev => prev + 1);
+      if (result.success) {
+        setChallengeComplete(true);
+        
+        // Award cash and update session
+        const level = LEVEL_CONFIGS.find(l => l.id === currentLevel);
+        if (level && !userSession.completedLevels.includes(currentLevel)) {
+          const reward = level.reward;
+          setLastReward(reward);
+          setShowRewardAnimation(true);
+          
+          setUserSession(prev => ({
+            ...prev,
+            completedLevels: [...prev.completedLevels, currentLevel],
+            bankBalance: prev.bankBalance + reward,
+            currentStreak: prev.currentStreak + 1,
+            totalEarnings: prev.totalEarnings + reward,
+          }));
+          
+          // Hide reward animation after 2 seconds
+          setTimeout(() => setShowRewardAnimation(false), 2000);
+        }
+      }
+    } else {
+      // Update statistics only in practice mode
+      setStats(prev => ({
+        attempts: prev.attempts + 1,
+        makes: prev.makes + (result.success ? 1 : 0),
+        averageAccuracy:
+          (prev.averageAccuracy * prev.attempts + result.accuracy) / (prev.attempts + 1),
+        bestAccuracy: Math.max(prev.bestAccuracy, result.accuracy),
+        totalDistance: prev.totalDistance + result.rollDistance,
+      }));
+    }
 
     // Auto-hide result after 3 seconds
     setTimeout(() => setLastResult(null), 3000);
@@ -220,6 +368,7 @@ export default function PuttingCoachAppMinimal() {
           isPutting={isPutting}
           showTrajectory={showTrajectory}
           showAimLine={showAimLine}
+          currentLevel={currentLevel}
         />
 
         {/* Floating PUTT Button - Repositioned */}
@@ -233,6 +382,77 @@ export default function PuttingCoachAppMinimal() {
             <Text style={styles.floatingPuttText}>{isPutting ? 'PUTTING...' : 'PUTT'}</Text>
           </TouchableOpacity>
         </View>
+        
+        {/* Game Mode Quick Controls - To the right of PUTT button */}
+        {isChallengMode && (
+          <View style={styles.gameModeControls}>
+            {/* Power Control */}
+            <View style={styles.gameModeControlItem}>
+              <Text style={styles.gameModeLabel}>Power</Text>
+              <View style={styles.gameModeButtonRow}>
+                <TouchableOpacity
+                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
+                  onPress={() => handleDistanceChange(-12)}
+                >
+                  <Text style={styles.gameModeButtonText}>−−</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.gameModeButton}
+                  onPress={() => handleDistanceChange(-1)}
+                >
+                  <Text style={styles.gameModeButtonText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.gameModeValue}>{distance.toFixed(1)}ft</Text>
+                <TouchableOpacity
+                  style={styles.gameModeButton}
+                  onPress={() => handleDistanceChange(1)}
+                >
+                  <Text style={styles.gameModeButtonText}>+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
+                  onPress={() => handleDistanceChange(12)}
+                >
+                  <Text style={styles.gameModeButtonText}>++</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Aim Control */}
+            <View style={styles.gameModeControlItem}>
+              <Text style={styles.gameModeLabel}>Aim</Text>
+              <View style={styles.gameModeButtonRow}>
+                <TouchableOpacity
+                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
+                  onPress={() => handleAimChange(-1)}
+                >
+                  <Text style={styles.gameModeButtonText}>←←</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.gameModeButton}
+                  onPress={() => handleAimChange(-0.25)}
+                >
+                  <Text style={styles.gameModeButtonText}>←</Text>
+                </TouchableOpacity>
+                <Text style={styles.gameModeValue}>
+                  {aimAngle === 0 ? 'Center' : `${aimAngle.toFixed(1)}°`}
+                </Text>
+                <TouchableOpacity
+                  style={styles.gameModeButton}
+                  onPress={() => handleAimChange(0.25)}
+                >
+                  <Text style={styles.gameModeButtonText}>→</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.gameModeButton, styles.gameModeButtonDouble]}
+                  onPress={() => handleAimChange(1)}
+                >
+                  <Text style={styles.gameModeButtonText}>→→</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
 
         {/* Compact Horizontal Dashboard - Top of Screen */}
@@ -285,14 +505,210 @@ export default function PuttingCoachAppMinimal() {
               <Text style={styles.dashboardLabel}>Slope</Text>
             </View>
           </View>
+          
+          {/* Bank Balance - Always visible */}
+          <View style={[styles.dashboardItem, styles.bankItem]}>
+            <Text style={styles.dashboardIcon}>💰</Text>
+            <View style={styles.dashboardTextContainer}>
+              <Text style={[styles.dashboardValue, styles.bankValue]}>${userSession.bankBalance}</Text>
+              <Text style={styles.dashboardLabel}>Bank</Text>
+            </View>
+          </View>
         </View>
 
         {/* Stats Display */}
-        {stats.attempts > 0 && (
+        {stats.attempts > 0 && !isChallengMode && (
           <View style={styles.statsOverlay}>
             <Text style={styles.statText}>
               {stats.makes}/{stats.attempts} ({Math.round((stats.makes / stats.attempts) * 100)}%)
             </Text>
+          </View>
+        )}
+        
+        {/* Reward Animation */}
+        {showRewardAnimation && (
+          <View style={styles.rewardAnimation}>
+            <Text style={styles.rewardEmoji}>💵</Text>
+            <Text style={styles.rewardText}>+${lastReward}</Text>
+            <Text style={styles.rewardSubtext}>Level Complete!</Text>
+          </View>
+        )}
+        
+        {/* Challenge Intro Tooltip */}
+        {showChallengeIntro && (
+          <TouchableWithoutFeedback onPress={() => setShowChallengeIntro(false)}>
+            <View style={styles.challengeIntroTooltip}>
+              <TouchableOpacity 
+                style={styles.challengeIntroClose} 
+                onPress={() => setShowChallengeIntro(false)}
+              >
+                <Text style={styles.challengeIntroCloseText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.challengeIntroText}>{challengeIntroText}</Text>
+            </View>
+          </TouchableWithoutFeedback>
+        )}
+        
+        {/* Challenge Mode Display */}
+        {isChallengMode && currentLevel !== null && (
+          <View style={styles.challengeOverlay}>
+            <TouchableOpacity
+              style={styles.exitChallengeButton}
+              onPress={() => {
+                setIsChallengMode(false);
+                setCurrentLevel(null);
+                setChallengeComplete(false);
+              }}
+            >
+              <Text style={styles.exitChallengeText}>Exit Challenge</Text>
+            </TouchableOpacity>
+            <Text style={styles.challengeTitle}>
+              Level {currentLevel}: {currentLevel === 1 ? 'Slope Master' : "Tiger's Masters"}
+            </Text>
+            <Text style={styles.challengeDesc}>
+              {currentLevel === 1 
+                ? 'Short putt with heavy slope - adjust your aim!' 
+                : '43ft downhill - lightning fast!'}
+            </Text>
+            <Text style={styles.challengeAttempts}>Attempts: {challengeAttempts}</Text>
+            {challengeComplete && (
+              <View style={styles.challengeSuccess}>
+                <Text style={styles.challengeSuccessText}>🎉 LEVEL COMPLETE! 🎉</Text>
+                <View style={styles.challengeButtonRow}>
+                  <TouchableOpacity 
+                    style={styles.challengeNextButton}
+                    onPress={() => {
+                      // Go to next level
+                      const nextLevel = LEVEL_CONFIGS.find(l => l.id === (currentLevel + 1));
+                      if (nextLevel) {
+                        setChallengeAttempts(0);
+                        setChallengeComplete(false);
+                        setCurrentLevel(nextLevel.id);
+                        
+                        // Show intro tooltip
+                        setChallengeIntroText(nextLevel.introText);
+                        setShowChallengeIntro(true);
+                        setTimeout(() => setShowChallengeIntro(false), 6000);
+                        
+                        // Set challenge parameters
+                        setHoleDistance(nextLevel.holeDistance);
+                        setSlopeUpDown(nextLevel.slopeUpDown);
+                        setSlopeLeftRight(nextLevel.slopeLeftRight);
+                        setGreenSpeed(nextLevel.greenSpeed);
+                        
+                        // Reset user controls
+                        setDistance(10);
+                        setAimAngle(0);
+                      } else {
+                        // No more levels, go back to practice
+                        setIsChallengMode(false);
+                        setCurrentLevel(null);
+                        setChallengeComplete(false);
+                        setChallengeAttempts(0);
+                        resetSettings();
+                      }
+                    }}
+                  >
+                    <Text style={styles.challengeNextText}>
+                      {currentLevel < LEVEL_CONFIGS.length ? 'Next Level →' : 'Complete!'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.challengeNextButton, styles.challengeBackButton]}
+                    onPress={() => {
+                      setIsChallengMode(false);
+                      setCurrentLevel(null);
+                      setChallengeComplete(false);
+                      setChallengeAttempts(0);
+                      resetSettings();
+                    }}
+                  >
+                    <Text style={styles.challengeNextText}>Exit</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+        
+        {/* Level Selection Button - Bottom Right */}
+        {!isChallengMode && (
+          <TouchableOpacity 
+            style={styles.levelSelectButton}
+            onPress={() => setShowLevelSelect(!showLevelSelect)}
+          >
+            <Text style={styles.levelSelectIcon}>🏆</Text>
+            <Text style={styles.levelSelectText}>Challenges</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Level Selection Menu */}
+        {showLevelSelect && (
+          <View style={styles.levelSelectMenu}>
+            <View style={styles.levelSelectHeader}>
+              <Text style={styles.levelSelectTitle}>Select Challenge</Text>
+              <TouchableOpacity onPress={() => setShowLevelSelect(false)}>
+                <Text style={styles.levelSelectClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.levelSelectScroll} showsVerticalScrollIndicator={false}>
+              {LEVEL_CONFIGS.map((level) => {
+                const isUnlocked = true; // All levels are now unlocked by default
+                const isCompleted = userSession.completedLevels.includes(level.id);
+                
+                return (
+                  <TouchableOpacity
+                    key={level.id}
+                    style={[
+                      styles.levelItem,
+                      isCompleted && styles.levelItemCompleted
+                    ]}
+                    onPress={() => {
+                      
+                      // Setup challenge
+                      setIsChallengMode(true);
+                      setCurrentLevel(level.id);
+                      setShowLevelSelect(false);
+                      setChallengeAttempts(0);
+                      setChallengeComplete(false);
+                      
+                      // Show intro tooltip
+                      setChallengeIntroText(level.introText);
+                      setShowChallengeIntro(true);
+                      setTimeout(() => setShowChallengeIntro(false), 6000);
+                      
+                      // Set challenge parameters
+                      setHoleDistance(level.holeDistance);
+                      setSlopeUpDown(level.slopeUpDown);
+                      setSlopeLeftRight(level.slopeLeftRight);
+                      setGreenSpeed(level.greenSpeed);
+                      
+                      // Reset user controls to standard defaults
+                      setDistance(10); // Standard 10ft power
+                      setAimAngle(0); // Center aim
+                      
+                      // Hide settings panel if open
+                      setShowControls(false);
+                    }}
+                  >
+                    <View style={styles.levelItemContent}>
+                      <View style={styles.levelItemNumberContainer}>
+                        <Text style={styles.levelItemNumber}>{level.id}</Text>
+                        {isCompleted && <Text style={styles.levelCheckmark}>✓</Text>}
+                      </View>
+                      <View style={styles.levelItemInfo}>
+                        <Text style={styles.levelItemTitle}>{level.name}</Text>
+                        <Text style={styles.levelItemDesc}>{level.description}</Text>
+                        <Text style={styles.levelReward}>
+                          {isCompleted ? '✅ Earned' : `💰 $${level.reward}`}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -414,7 +830,8 @@ export default function PuttingCoachAppMinimal() {
                 </View>
               </View>
 
-              {/* PUTTING CONFIGURATION - Grouped */}
+              {/* PUTTING CONFIGURATION - Grouped - Hidden in Challenge Mode */}
+              {!isChallengMode && (
               <View style={styles.configSection}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>⚙️ Putting Configuration</Text>
@@ -616,6 +1033,7 @@ export default function PuttingCoachAppMinimal() {
                   </View>
                 </View>
               </View>
+              )}
             </ScrollView>
           </View>
         )}
@@ -1143,5 +1561,353 @@ const styles = StyleSheet.create({
   },
   compactOptionTextActive: {
     color: 'white',
+  },
+  
+  // Challenge Mode Styles
+  levelSelectButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: 'rgba(76, 175, 80, 0.95)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  levelSelectIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  levelSelectText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  levelSelectMenu: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    width: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  levelSelectHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  levelSelectTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  levelSelectClose: {
+    fontSize: 20,
+    color: '#666',
+    padding: 5,
+  },
+  levelItem: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  levelItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelItemNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginRight: 15,
+    width: 30,
+  },
+  levelItemInfo: {
+    flex: 1,
+  },
+  levelItemTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  levelItemDesc: {
+    fontSize: 12,
+    color: '#666',
+  },
+  levelItemLocked: {
+    backgroundColor: '#e9ecef',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#dee2e6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    opacity: 0.6,
+  },
+  levelItemTitleLocked: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#adb5bd',
+    marginBottom: 4,
+  },
+  levelItemDescLocked: {
+    fontSize: 12,
+    color: '#adb5bd',
+  },
+  lockIcon: {
+    fontSize: 20,
+    marginLeft: 'auto',
+  },
+  challengeOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 15,
+    padding: 15,
+    minWidth: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  challengeTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 5,
+  },
+  challengeDesc: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  exitChallengeButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#ff4444',
+    borderRadius: 5,
+  },
+  exitChallengeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  challengeAttempts: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  challengeSuccess: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  challengeSuccessText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 15,
+  },
+  challengeButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  challengeNextButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flex: 1,
+  },
+  challengeBackButton: {
+    backgroundColor: '#666',
+    flex: 0.5,
+  },
+  challengeNextText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  challengeIntroTooltip: {
+    position: 'absolute',
+    top: '40%',
+    left: 40,
+    right: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    padding: 25,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  challengeIntroText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  challengeIntroClose: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 15,
+  },
+  challengeIntroCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  // Game Mode Controls (next to putt button)
+  gameModeControls: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20, // Position to the right side of screen
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 15,
+    padding: 12,
+    gap: 20,
+  },
+  gameModeControlItem: {
+    alignItems: 'center',
+  },
+  gameModeLabel: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  gameModeButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gameModeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gameModeButtonDouble: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 32,
+  },
+  gameModeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  gameModeValue: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    minWidth: 50,
+    textAlign: 'center',
+  },
+  
+  // Bank and reward styles
+  bankItem: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderColor: '#FFD700',
+    borderWidth: 1,
+  },
+  bankValue: {
+    color: '#FFD700',
+    fontWeight: 'bold',
+  },
+  rewardAnimation: {
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    padding: 30,
+    borderWidth: 3,
+    borderColor: '#FFD700',
+  },
+  rewardEmoji: {
+    fontSize: 60,
+    marginBottom: 10,
+  },
+  rewardText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 5,
+  },
+  rewardSubtext: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  
+  // Level selection enhancements
+  levelSelectScroll: {
+    maxHeight: 400,
+  },
+  levelItemCompleted: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#4CAF50',
+  },
+  levelItemNumberContainer: {
+    position: 'relative',
+    marginRight: 15,
+  },
+  levelItemNumberLocked: {
+    color: '#adb5bd',
+  },
+  levelCheckmark: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    fontSize: 16,
+    color: '#4CAF50',
+  },
+  levelReward: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '600',
   },
 });

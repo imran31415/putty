@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: putty-frontend
-        image: registry.digitalocean.com/resourceloop/putty-frontend:v1.0.cbd7cdc-20250826-174857
+        image: registry.digitalocean.com/resourceloop/putty-frontend:v1.0.3763ae7-20250826-201523
         ports:
         - containerPort: 80
           name: http
