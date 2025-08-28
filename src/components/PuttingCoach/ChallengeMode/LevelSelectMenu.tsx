@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { LEVEL_CONFIGS, LevelConfig } from '../../../constants/levels';
 import { UserSession } from '../../../types/game';
 
@@ -33,17 +27,14 @@ export default function LevelSelectMenu({
         </TouchableOpacity>
       </View>
       <ScrollView style={styles.levelSelectScroll} showsVerticalScrollIndicator={false}>
-        {LEVEL_CONFIGS.map((level) => {
+        {LEVEL_CONFIGS.map(level => {
           const isUnlocked = true; // All levels are now unlocked by default
           const isCompleted = userSession.completedLevels.includes(level.id);
-          
+
           return (
             <TouchableOpacity
               key={level.id}
-              style={[
-                styles.levelItem,
-                isCompleted && styles.levelItemCompleted
-              ]}
+              style={[styles.levelItem, isCompleted && styles.levelItemCompleted]}
               onPress={() => onLevelSelect(level)}
             >
               <View style={styles.levelItemContent}>

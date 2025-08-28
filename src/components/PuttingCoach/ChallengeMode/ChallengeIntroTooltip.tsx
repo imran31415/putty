@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback } from 'react-native';
 
 interface ChallengeIntroTooltipProps {
   showChallengeIntro: boolean;
@@ -23,8 +17,8 @@ export default function ChallengeIntroTooltip({
   return (
     <TouchableWithoutFeedback onPress={() => setShowChallengeIntro(false)}>
       <View style={styles.challengeIntroTooltip}>
-        <TouchableOpacity 
-          style={styles.challengeIntroClose} 
+        <TouchableOpacity
+          style={styles.challengeIntroClose}
           onPress={() => setShowChallengeIntro(false)}
         >
           <Text style={styles.challengeIntroCloseText}>✕</Text>

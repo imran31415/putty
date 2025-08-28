@@ -41,32 +41,38 @@ describe('Swing Challenge Calculations', () => {
 
   describe('Hole World Position', () => {
     const getHoleWorldZ = (holeFeet: number) => {
-      const worldUnitsPerFoot = holeFeet <= 10 ? 1.0 :
-                               holeFeet <= 25 ? 0.8 :
-                               holeFeet <= 50 ? 0.6 :
-                               holeFeet <= 100 ? 0.4 : 0.25;
+      const worldUnitsPerFoot =
+        holeFeet <= 10
+          ? 1.0
+          : holeFeet <= 25
+            ? 0.8
+            : holeFeet <= 50
+              ? 0.6
+              : holeFeet <= 100
+                ? 0.4
+                : 0.25;
       const ballStartZ = 4; // Ball always starts at z=4
-      return ballStartZ - (holeFeet * worldUnitsPerFoot);
+      return ballStartZ - holeFeet * worldUnitsPerFoot;
     };
 
     test('250 yard hole (750 feet) should be at z = -183.5', () => {
       const holeFeet = 750;
       const worldZ = getHoleWorldZ(holeFeet);
-      expect(worldZ).toBe(4 - (750 * 0.25)); // 4 - 187.5 = -183.5
+      expect(worldZ).toBe(4 - 750 * 0.25); // 4 - 187.5 = -183.5
       expect(worldZ).toBe(-183.5);
     });
 
     test('100 yard hole (300 feet) should be at z = -71', () => {
       const holeFeet = 300;
       const worldZ = getHoleWorldZ(holeFeet);
-      expect(worldZ).toBe(4 - (300 * 0.25)); // 4 - 75 = -71
+      expect(worldZ).toBe(4 - 300 * 0.25); // 4 - 75 = -71
       expect(worldZ).toBe(-71);
     });
 
     test('10 feet hole should be at z = -6', () => {
       const holeFeet = 10;
       const worldZ = getHoleWorldZ(holeFeet);
-      expect(worldZ).toBe(4 - (10 * 1.0)); // 4 - 10 = -6
+      expect(worldZ).toBe(4 - 10 * 1.0); // 4 - 10 = -6
       expect(worldZ).toBe(-6);
     });
   });
@@ -79,7 +85,7 @@ describe('Swing Challenge Calculations', () => {
       const ballFeet = ballYards * 3;
       const worldUnitsPerFoot = holeFeet <= 100 ? 0.4 : 0.25;
       const ballStartZ = 4;
-      return ballStartZ - (ballFeet * worldUnitsPerFoot);
+      return ballStartZ - ballFeet * worldUnitsPerFoot;
     };
 
     test('Ball at 132 yards with 250 yard hole should be at z = -95', () => {
@@ -162,15 +168,15 @@ describe('Swing Challenge Calculations', () => {
     test('Hole should stay at original position when switching to putt mode', () => {
       const originalHoleYards = 250;
       const originalHoleFeet = originalHoleYards * 3; // 750 feet
-      
+
       // When switching to putt mode with 9 yards remaining
       const remainingYards = 9;
       const puttDistanceFeet = remainingYards * 3; // 27 feet
-      
+
       // Hole should still be at 750 feet, not 27 feet
       expect(originalHoleFeet).toBe(750);
       expect(puttDistanceFeet).toBe(27);
-      
+
       // The hole position should NOT change
       const holePositionAfterSwitch = originalHoleFeet; // Should stay at 750
       expect(holePositionAfterSwitch).toBe(750);

@@ -21,10 +21,10 @@ const DEFAULT_CONFIG: RandomizationConfig = {
   minRadius: 2.5,
   maxRadius: 5.0,
   excludeAngles: [
-    { start: -20, end: 20 },   // Don't place spectators directly in putting line behind ball
-    { start: 170, end: 190 },  // Don't place spectators directly in putting line in front of hole
-    { start: 85, end: 95 },    // Avoid direct left of putting line
-    { start: 265, end: 275 },  // Avoid direct right of putting line
+    { start: -20, end: 20 }, // Don't place spectators directly in putting line behind ball
+    { start: 170, end: 190 }, // Don't place spectators directly in putting line in front of hole
+    { start: 85, end: 95 }, // Avoid direct left of putting line
+    { start: 265, end: 275 }, // Avoid direct right of putting line
   ],
 };
 
@@ -33,36 +33,28 @@ const DEFAULT_CONFIG: RandomizationConfig = {
  * @param holeDistance - Distance to hole in feet
  * @param seed - Optional seed for reproducible randomization
  */
-export function generateSpectatorConfig(
-  holeDistance: number,
-  seed?: number
-): SpectatorConfig {
+export function generateSpectatorConfig(holeDistance: number, seed?: number): SpectatorConfig {
   // Simple seeded random if needed
   const random = seed ? seededRandom(seed) : Math.random;
-  
+
   // Decide how many spectators to show (1-2)
   const spectatorCount = Math.floor(random() * 2) + 1; // 1 or 2
-  
+
   // All three possible spectator types
   const spectatorTypes = ['female', 'putting', 'cooler'];
-  
+
   // Randomly select which spectators to show
-  const selectedSpectators = shuffleArray(spectatorTypes, random)
-    .slice(0, spectatorCount);
-  
+  const selectedSpectators = shuffleArray(spectatorTypes, random).slice(0, spectatorCount);
+
   const config: SpectatorConfig = {
     showFemaleRobot: selectedSpectators.includes('female'),
     showPuttingRobot: selectedSpectators.includes('putting'),
     showCooler: selectedSpectators.includes('cooler'),
   };
-  
+
   // Generate positions for selected spectators
-  const positions = generateRandomPositions(
-    selectedSpectators.length,
-    holeDistance,
-    random
-  );
-  
+  const positions = generateRandomPositions(selectedSpectators.length, holeDistance, random);
+
   // Assign positions to selected spectators
   selectedSpectators.forEach((type, index) => {
     const pos = positions[index];
@@ -74,7 +66,7 @@ export function generateSpectatorConfig(
       config.coolerPosition = pos;
     }
   });
-  
+
   return config;
 }
 
@@ -89,16 +81,16 @@ function generateRandomPositions(
 ): { x: number; z: number; angle: number }[] {
   const positions: { x: number; z: number; angle: number }[] = [];
   const usedAngles: number[] = [];
-  
+
   // Adjust radius based on hole distance (closer spectators for shorter putts)
   const radiusMultiplier = Math.min(1.0, holeDistance / 30);
   const minRadius = DEFAULT_CONFIG.minRadius * radiusMultiplier;
   const maxRadius = DEFAULT_CONFIG.maxRadius * radiusMultiplier;
-  
+
   for (let i = 0; i < count; i++) {
     let angle: number;
     let attempts = 0;
-    
+
     // Find a valid angle that's not too close to existing spectators
     do {
       // Generate angle avoiding excluded zones (not between ball and hole)
@@ -115,20 +107,20 @@ function generateRandomPositions(
       attempts < 20 &&
       usedAngles.some(a => Math.abs(a - angle) < 45) // Keep spectators spread out
     );
-    
+
     usedAngles.push(angle);
-    
+
     // Random radius within range
     const radius = minRadius + random() * (maxRadius - minRadius);
-    
+
     // Convert to world coordinates (relative to hole)
     const radians = (angle * Math.PI) / 180;
     const x = Math.cos(radians) * radius;
     const z = Math.sin(radians) * radius;
-    
+
     positions.push({ x, z, angle });
   }
-  
+
   return positions;
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,9 @@ import {
   TextInput,
   StyleSheet,
   Platform,
-  Dimensions,
 } from 'react-native';
-import { ClubType, CLUB_DATA, getClubList } from '../../../constants/clubData';
-import { Picker } from '@react-native-picker/picker';
+import { ClubType, CLUB_DATA } from '../../../constants/clubData';
+import ClubSelectionModal from './ClubSelectionModal';
 
 interface SwingModeControlsProps {
   selectedClub: ClubType;
@@ -24,10 +23,9 @@ interface SwingModeControlsProps {
   setClubPath: (path: number) => void;
   strikeQuality: number;
   setStrikeQuality: (quality: number) => void;
+  onSwitchToPutter?: () => void;
 }
 
-const { width, height } = Dimensions.get('window');
-const isSmallScreen = height < 700 || width < 380;
 
 export default function SwingModeControls({
   selectedClub,
@@ -42,10 +40,14 @@ export default function SwingModeControls({
   setClubPath,
   strikeQuality,
   setStrikeQuality,
+  onSwitchToPutter,
 }: SwingModeControlsProps) {
+  const [showClubModal, setShowClubModal] = useState(false);
   const clubSpec = CLUB_DATA[selectedClub];
   const adjustedPower = swingPower < 30 ? swingPower * 1.5 : swingPower;
-  const estimatedDistance = Math.round(clubSpec.typicalDistance * (adjustedPower / 100) * strikeQuality);
+  const estimatedDistance = Math.round(
+    clubSpec.typicalDistance * (adjustedPower / 100) * strikeQuality
+  );
 
   return (
     <>
@@ -58,22 +60,10 @@ export default function SwingModeControls({
         {/* Club Selection */}
         <View style={styles.compactControlItem}>
           <Text style={styles.compactControlLabel}>Club</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={selectedClub}
-              onValueChange={setSelectedClub}
-              style={styles.picker}
-            >
-              {getClubList().map(club => (
-                <Picker.Item
-                  key={club}
-                  label={CLUB_DATA[club].name}
-                  value={club}
-                  color={CLUB_DATA[club].color}
-                />
-              ))}
-            </Picker>
-          </View>
+          <TouchableOpacity style={styles.clubSelectButton} onPress={() => setShowClubModal(true)}>
+            <Text style={[styles.clubSelectText, { color: clubSpec.color }]}>{clubSpec.name}</Text>
+            <Text style={styles.clubSelectArrow}>▼</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Swing Power */}
@@ -120,7 +110,9 @@ export default function SwingModeControls({
 
         {/* Face Angle */}
         <View style={styles.compactControlItem}>
-          <Text style={styles.compactControlLabel}>Face {faceAngle > 0 ? '→ Open' : faceAngle < 0 ? '← Closed' : '| Square'}</Text>
+          <Text style={styles.compactControlLabel}>
+            Face {faceAngle > 0 ? '→ Open' : faceAngle < 0 ? '← Closed' : '| Square'}
+          </Text>
           <View style={styles.compactControlRow}>
             <TouchableOpacity
               style={styles.compactButton}
@@ -158,13 +150,6 @@ export default function SwingModeControls({
               <Text style={styles.compactButtonText}>→→</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
-
-      {/* ADVANCED SWING SETTINGS */}
-      <View style={styles.configSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>⚙️ Advanced Swing</Text>
         </View>
 
         {/* Attack Angle */}
@@ -234,10 +219,7 @@ export default function SwingModeControls({
             >
               <Text style={styles.compactButtonText}>↗</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.compactButton}
-              onPress={() => setClubPath(0)}
-            >
+            <TouchableOpacity style={styles.compactButton} onPress={() => setClubPath(0)}>
               <Text style={styles.compactButtonText}>0</Text>
             </TouchableOpacity>
           </View>
@@ -270,10 +252,7 @@ export default function SwingModeControls({
             >
               <Text style={styles.compactButtonText}>+</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.compactButton}
-              onPress={() => setStrikeQuality(1.0)}
-            >
+            <TouchableOpacity style={styles.compactButton} onPress={() => setStrikeQuality(1.0)}>
               <Text style={styles.compactButtonText}>💯</Text>
             </TouchableOpacity>
           </View>
@@ -282,13 +261,27 @@ export default function SwingModeControls({
         {/* Shot Shape Preview */}
         <View style={styles.shotShapePreview}>
           <Text style={styles.shotShapeText}>
-            Expected: {faceAngle - clubPath > 2 ? '🔄 Fade' : faceAngle - clubPath < -2 ? '🔁 Draw' : '➡️ Straight'}
+            Expected:{' '}
+            {faceAngle - clubPath > 2
+              ? '🔄 Fade'
+              : faceAngle - clubPath < -2
+                ? '🔁 Draw'
+                : '➡️ Straight'}
           </Text>
           <Text style={styles.shotShapeDetail}>
             Face-to-Path: {(faceAngle - clubPath).toFixed(1)}°
           </Text>
         </View>
       </View>
+
+      {/* Club Selection Modal */}
+      <ClubSelectionModal
+        visible={showClubModal}
+        selectedClub={selectedClub}
+        onSelectClub={setSelectedClub}
+        onClose={() => setShowClubModal(false)}
+        onSwitchToPutter={onSwitchToPutter}
+      />
     </>
   );
 }
@@ -391,5 +384,27 @@ const styles = StyleSheet.create({
   shotShapeDetail: {
     fontSize: 12,
     color: '#666',
+  },
+  clubSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: 120,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  clubSelectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  clubSelectArrow: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 8,
   },
 });

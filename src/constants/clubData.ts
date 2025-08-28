@@ -1,15 +1,15 @@
-export type ClubType = 'driver' | '3wood' | '5iron' | '7iron' | '9iron' | 'pw' | 'sw';
+export type ClubType = 'driver' | '3wood' | '5iron' | '7iron' | '9iron' | 'pw' | 'sw' | 'sw-chip';
 
 export interface ClubSpec {
   name: string;
   shortName: string;
-  loft: number;           // Static loft in degrees
+  loft: number; // Static loft in degrees
   typicalDistance: number; // Yards at 100% power for average player
-  maxClubSpeed: number;   // MPH for average player
-  smashFactor: number;    // Ball speed / club speed ratio
+  maxClubSpeed: number; // MPH for average player
+  smashFactor: number; // Ball speed / club speed ratio
   defaultSpinRate: number; // RPM at normal conditions
   attackAngleOptimal: number; // Optimal attack angle for this club
-  color: string;          // UI color for club
+  color: string; // UI color for club
 }
 
 export const CLUB_DATA: Record<ClubType, ClubSpec> = {
@@ -89,6 +89,17 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     defaultSpinRate: 10000,
     attackAngleOptimal: -5.0,
     color: '#FFB347',
+  },
+  'sw-chip': {
+    name: 'SW - Chipping',
+    shortName: 'CHIP',
+    loft: 56, // Same loft as SW
+    typicalDistance: 30, // Max chip distance
+    maxClubSpeed: 35, // Much slower swing for chipping
+    smashFactor: 1.15, // Lower smash for controlled chips
+    defaultSpinRate: 6000, // High spin for stopping power
+    attackAngleOptimal: -6.0, // Steep angle for clean contact
+    color: '#FFC080', // Lighter orange
   },
 };
 

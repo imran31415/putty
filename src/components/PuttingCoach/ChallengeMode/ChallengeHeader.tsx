@@ -40,8 +40,8 @@ export default function ChallengeHeader({
                 {currentLevel < LEVEL_CONFIGS.length ? 'Next Level →' : 'Complete!'}
               </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.challengeNextButton, styles.challengeBackButton]}
               onPress={onExit}
             >

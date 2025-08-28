@@ -82,15 +82,21 @@ export default function ControlsPanel({
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>🏌️ Primary Controls</Text>
           </View>
-          
+
           {/* Putt Power */}
           <View style={styles.compactControlItem}>
             <Text style={styles.compactControlLabel}>Putt Power</Text>
             <View style={styles.compactControlRow}>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleDistanceChange(-12)}>
+              <TouchableOpacity
+                style={styles.compactButton}
+                onPress={() => handleDistanceChange(-12)}
+              >
                 <Text style={styles.compactButtonText}>−−</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleDistanceChange(-1)}>
+              <TouchableOpacity
+                style={styles.compactButton}
+                onPress={() => handleDistanceChange(-1)}
+              >
                 <Text style={styles.compactButtonText}>−</Text>
               </TouchableOpacity>
               <TextInput
@@ -104,10 +110,16 @@ export default function ControlsPanel({
                 returnKeyType="done"
               />
               <Text style={styles.compactUnitLabel}>ft</Text>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleDistanceChange(1)}>
+              <TouchableOpacity
+                style={styles.compactButton}
+                onPress={() => handleDistanceChange(1)}
+              >
                 <Text style={styles.compactButtonText}>+</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleDistanceChange(12)}>
+              <TouchableOpacity
+                style={styles.compactButton}
+                onPress={() => handleDistanceChange(12)}
+              >
                 <Text style={styles.compactButtonText}>++</Text>
               </TouchableOpacity>
             </View>
@@ -150,18 +162,26 @@ export default function ControlsPanel({
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>⚙️ Putting Configuration</Text>
             </View>
-            
+
             {/* Distance to Hole */}
             <View style={styles.compactControlItem}>
               <Text style={styles.compactControlLabel}>Distance to Hole</Text>
               <View style={styles.compactControlRow}>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleHoleDistanceChange(-0.5)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleHoleDistanceChange(-0.5)}
+                >
                   <Text style={styles.compactButtonText}>−</Text>
                 </TouchableOpacity>
                 <Text style={styles.compactValue}>
-                  {holeDistance < 1 ? `${(holeDistance * 12).toFixed(1)}"` : `${holeDistance.toFixed(1)}ft`}
+                  {holeDistance < 1
+                    ? `${(holeDistance * 12).toFixed(1)}"`
+                    : `${holeDistance.toFixed(1)}ft`}
                 </Text>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleHoleDistanceChange(0.5)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleHoleDistanceChange(0.5)}
+                >
                   <Text style={styles.compactButtonText}>+</Text>
                 </TouchableOpacity>
               </View>
@@ -171,11 +191,17 @@ export default function ControlsPanel({
             <View style={styles.compactControlItem}>
               <Text style={styles.compactControlLabel}>Green Speed</Text>
               <View style={styles.compactControlRow}>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleGreenSpeedChange(-0.5)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleGreenSpeedChange(-0.5)}
+                >
                   <Text style={styles.compactButtonText}>−</Text>
                 </TouchableOpacity>
                 <Text style={styles.compactValue}>{greenSpeed}</Text>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleGreenSpeedChange(0.5)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleGreenSpeedChange(0.5)}
+                >
                   <Text style={styles.compactButtonText}>+</Text>
                 </TouchableOpacity>
               </View>
@@ -185,10 +211,16 @@ export default function ControlsPanel({
             <View style={styles.compactControlItem}>
               <Text style={styles.compactControlLabel}>Slope Up/Down</Text>
               <View style={styles.compactControlRow}>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleUpDownSlopeChange(-1)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleUpDownSlopeChange(-1)}
+                >
                   <Text style={styles.compactButtonText}>⬇⬇</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleUpDownSlopeChange(-0.25)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleUpDownSlopeChange(-0.25)}
+                >
                   <Text style={styles.compactButtonText}>⬇</Text>
                 </TouchableOpacity>
                 <TextInput
@@ -202,10 +234,16 @@ export default function ControlsPanel({
                   returnKeyType="done"
                 />
                 <Text style={styles.compactUnitLabel}>°</Text>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleUpDownSlopeChange(0.25)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleUpDownSlopeChange(0.25)}
+                >
                   <Text style={styles.compactButtonText}>⬆</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleUpDownSlopeChange(1)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleUpDownSlopeChange(1)}
+                >
                   <Text style={styles.compactButtonText}>⬆⬆</Text>
                 </TouchableOpacity>
               </View>
@@ -215,10 +253,16 @@ export default function ControlsPanel({
             <View style={styles.compactControlItem}>
               <Text style={styles.compactControlLabel}>Slope Left/Right</Text>
               <View style={styles.compactControlRow}>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleLeftRightSlopeChange(-1)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleLeftRightSlopeChange(-1)}
+                >
                   <Text style={styles.compactButtonText}>⬅⬅</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleLeftRightSlopeChange(-0.25)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleLeftRightSlopeChange(-0.25)}
+                >
                   <Text style={styles.compactButtonText}>⬅</Text>
                 </TouchableOpacity>
                 <TextInput
@@ -232,10 +276,16 @@ export default function ControlsPanel({
                   returnKeyType="done"
                 />
                 <Text style={styles.compactUnitLabel}>°</Text>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleLeftRightSlopeChange(0.25)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleLeftRightSlopeChange(0.25)}
+                >
                   <Text style={styles.compactButtonText}>➡</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.compactButton} onPress={() => handleLeftRightSlopeChange(1)}>
+                <TouchableOpacity
+                  style={styles.compactButton}
+                  onPress={() => handleLeftRightSlopeChange(1)}
+                >
                   <Text style={styles.compactButtonText}>➡➡</Text>
                 </TouchableOpacity>
               </View>
@@ -246,19 +296,35 @@ export default function ControlsPanel({
               <Text style={styles.compactControlLabel}>Visual Options</Text>
               <View style={styles.optionButtonsRow}>
                 <TouchableOpacity
-                  style={[styles.compactOptionButton, showTrajectory && styles.compactOptionButtonActive]}
+                  style={[
+                    styles.compactOptionButton,
+                    showTrajectory && styles.compactOptionButtonActive,
+                  ]}
                   onPress={() => setShowTrajectory(!showTrajectory)}
                 >
-                  <Text style={[styles.compactOptionText, showTrajectory && styles.compactOptionTextActive]}>
+                  <Text
+                    style={[
+                      styles.compactOptionText,
+                      showTrajectory && styles.compactOptionTextActive,
+                    ]}
+                  >
                     Path
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.compactOptionButton, showAimLine && styles.compactOptionButtonActive]}
+                  style={[
+                    styles.compactOptionButton,
+                    showAimLine && styles.compactOptionButtonActive,
+                  ]}
                   onPress={() => setShowAimLine(!showAimLine)}
                 >
-                  <Text style={[styles.compactOptionText, showAimLine && styles.compactOptionTextActive]}>
+                  <Text
+                    style={[
+                      styles.compactOptionText,
+                      showAimLine && styles.compactOptionTextActive,
+                    ]}
+                  >
                     Aim Line
                   </Text>
                 </TouchableOpacity>
@@ -288,12 +354,15 @@ export default function ControlsPanel({
                   <Text style={styles.compactOptionText}>Reset Stats</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.compactOptionButton, styles.resetButton]} onPress={resetSettings}>
+                <TouchableOpacity
+                  style={[styles.compactOptionButton, styles.resetButton]}
+                  onPress={resetSettings}
+                >
                   <Text style={[styles.compactOptionText, styles.resetButtonText]}>Reset All</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             {/* Bank Balance */}
             <View style={styles.compactControlItem}>
               <Text style={styles.compactControlLabel}>💰 Bank Balance</Text>

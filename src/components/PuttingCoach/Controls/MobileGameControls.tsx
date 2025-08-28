@@ -25,22 +25,34 @@ export default function MobileGameControls({
       <View style={styles.mobileControlGroup}>
         <Text style={styles.mobileControlLabel}>Pwr</Text>
         <View style={styles.mobileButtonRow}>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-12)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleDistanceChange(-12)}
+          >
             <Text style={styles.mobileControlButtonText}>--</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-1)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleDistanceChange(-1)}
+          >
             <Text style={styles.mobileControlButtonText}>-</Text>
           </TouchableOpacity>
           <Text style={styles.mobileControlValue}>{distance.toFixed(0)}ft</Text>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(1)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleDistanceChange(1)}
+          >
             <Text style={styles.mobileControlButtonText}>+</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(12)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleDistanceChange(12)}
+          >
             <Text style={styles.mobileControlButtonText}>++</Text>
           </TouchableOpacity>
         </View>
       </View>
-      
+
       {/* Compact Aim */}
       <View style={styles.mobileControlGroup}>
         <Text style={styles.mobileControlLabel}>Aim</Text>
@@ -48,13 +60,23 @@ export default function MobileGameControls({
           <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-1)}>
             <Text style={styles.mobileControlButtonText}>LL</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-0.25)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleAimChange(-0.25)}
+          >
             <Text style={styles.mobileControlButtonText}>L</Text>
           </TouchableOpacity>
           <Text style={styles.mobileControlValue}>
-            {aimAngle === 0 ? 'C' : aimAngle > 0 ? `R${aimAngle.toFixed(1)}` : `L${Math.abs(aimAngle).toFixed(1)}`}
+            {aimAngle === 0
+              ? 'C'
+              : aimAngle > 0
+                ? `R${aimAngle.toFixed(1)}`
+                : `L${Math.abs(aimAngle).toFixed(1)}`}
           </Text>
-          <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(0.25)}>
+          <TouchableOpacity
+            style={styles.mobileControlButton}
+            onPress={() => handleAimChange(0.25)}
+          >
             <Text style={styles.mobileControlButtonText}>R</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(1)}>

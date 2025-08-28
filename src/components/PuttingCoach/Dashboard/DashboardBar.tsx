@@ -28,7 +28,7 @@ export default function DashboardBar({
           <Text style={styles.menuButtonText}>☰</Text>
         </TouchableOpacity>
       )}
-      
+
       {/* Putt Power */}
       <View style={styles.dashboardItem}>
         <Text style={styles.dashboardIcon}>⚡</Text>
@@ -43,7 +43,9 @@ export default function DashboardBar({
         <Text style={styles.dashboardIcon}>🎯</Text>
         <View style={styles.dashboardTextContainer}>
           <Text style={styles.dashboardValue}>
-            {holeDistance < 1 ? `${(holeDistance * 12).toFixed(0)}"` : `${holeDistance.toFixed(1)}ft`}
+            {holeDistance < 1
+              ? `${(holeDistance * 12).toFixed(0)}"`
+              : `${holeDistance.toFixed(1)}ft`}
           </Text>
           <Text style={styles.dashboardLabel}>To Hole</Text>
         </View>

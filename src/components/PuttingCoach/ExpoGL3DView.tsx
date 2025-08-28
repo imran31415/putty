@@ -13,10 +13,11 @@ import { Renderer, TextureLoader } from 'expo-three';
 import * as THREE from 'three';
 import { PuttingResult } from './PuttingPhysics';
 import { FlightResult, SwingData, SwingPhysics } from './SwingPhysics';
-import { 
-  getChallengeModeSpectatorConfig, 
-  getPracticeModeSpectatorConfig 
+import {
+  getChallengeModeSpectatorConfig,
+  getPracticeModeSpectatorConfig,
 } from '../../utils/sceneRandomizer';
+import { PUTTING_PHYSICS } from '../../constants/puttingPhysics';
 
 interface PuttingData {
   distance: number;
@@ -60,14 +61,14 @@ export default function ExpoGL3DView({
   const animationRef = useRef<number | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Camera control state - Dynamic zoom based on putt distance  
+  // Camera control state - Dynamic zoom based on putt distance
   const [cameraAngle, setCameraAngle] = useState(0);
   const [cameraHeight, setCameraHeight] = useState(6);
-  
+
   // Initialize camera radius based on initial hole distance (will use centralized scaling when available)
   const getInitialCameraRadius = (distanceFeet: number) => {
     const BASE_RADIUS = 8;
-    
+
     // Use same scaling logic as getWorldUnitsPerFoot (hardcoded for initialization)
     let worldUnitsPerFoot;
     if (distanceFeet <= 10) worldUnitsPerFoot = 1.0;
@@ -75,16 +76,18 @@ export default function ExpoGL3DView({
     else if (distanceFeet <= 50) worldUnitsPerFoot = 0.6;
     else if (distanceFeet <= 100) worldUnitsPerFoot = 0.4;
     else worldUnitsPerFoot = 0.25;
-    
+
     const ballZ = 4;
-    const holeZ = ballZ - (distanceFeet * worldUnitsPerFoot);
+    const holeZ = ballZ - distanceFeet * worldUnitsPerFoot;
     const totalSceneDepth = Math.abs(ballZ - holeZ);
     const requiredRadius = totalSceneDepth * 1.8; // Increased to 1.8 for much better visibility
-    
+
     return Math.max(BASE_RADIUS, Math.min(requiredRadius, 40));
   };
-  
-  const [cameraRadius, setCameraRadius] = useState(() => getInitialCameraRadius(puttingData.holeDistance));
+
+  const [cameraRadius, setCameraRadius] = useState(() =>
+    getInitialCameraRadius(puttingData.holeDistance)
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [lastPointer, setLastPointer] = useState({ x: 0, y: 0 });
   const [autoRotate, setAutoRotate] = useState(true);
@@ -96,120 +99,121 @@ export default function ExpoGL3DView({
 
   // COMPREHENSIVE HOLE/FLAG SYSTEM - v5 COMPLETE REFACTOR
   // This function manages ALL hole and flag creation for ALL modes
-  const createHoleAndFlag = useCallback((scene: THREE.Scene, distanceFeet: number, mode: string) => {
-    // Creating hole/flag
-    
-    // Calculate position using centralized scaling
-    const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
-    let worldUnitsPerFoot: number;
-    if (getWorldUnitsPerFoot) {
-      worldUnitsPerFoot = getWorldUnitsPerFoot(distanceFeet);
-    } else {
-      // Fallback scaling
-      if (distanceFeet <= 10) worldUnitsPerFoot = 1.0;
-      else if (distanceFeet <= 25) worldUnitsPerFoot = 0.8;
-      else if (distanceFeet <= 50) worldUnitsPerFoot = 0.6;
-      else if (distanceFeet <= 100) worldUnitsPerFoot = 0.4;
-      else worldUnitsPerFoot = 0.25;
-    }
-    
-    const holeZ = 4 - (distanceFeet * worldUnitsPerFoot);
-    
-    // Remove ALL existing holes, flags, and flagsticks
-    const toRemove = scene.children.filter(child => 
-      child.userData?.isFlag || 
-      child.userData?.isFlagstick ||
-      child.userData?.isHole
-    );
-    toRemove.forEach(child => {
-      scene.remove(child);
-      if ('geometry' in child) (child as any).geometry?.dispose();
-      if ('material' in child) {
-        const mat = (child as any).material;
-        if (mat) {
-          if (Array.isArray(mat)) {
-            mat.forEach((m: any) => m?.dispose());
-          } else {
-            mat.dispose();
+  const createHoleAndFlag = useCallback(
+    (scene: THREE.Scene, distanceFeet: number, mode: string) => {
+      // Creating hole/flag
+
+      // Calculate position using centralized scaling
+      const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      let worldUnitsPerFoot: number;
+      if (getWorldUnitsPerFoot) {
+        worldUnitsPerFoot = getWorldUnitsPerFoot(distanceFeet);
+      } else {
+        // Fallback scaling
+        if (distanceFeet <= 10) worldUnitsPerFoot = 1.0;
+        else if (distanceFeet <= 25) worldUnitsPerFoot = 0.8;
+        else if (distanceFeet <= 50) worldUnitsPerFoot = 0.6;
+        else if (distanceFeet <= 100) worldUnitsPerFoot = 0.4;
+        else worldUnitsPerFoot = 0.25;
+      }
+
+      const holeZ = 4 - distanceFeet * worldUnitsPerFoot;
+
+      // Remove ALL existing holes, flags, and flagsticks
+      const toRemove = scene.children.filter(
+        child => child.userData?.isFlag || child.userData?.isFlagstick || child.userData?.isHole
+      );
+      toRemove.forEach(child => {
+        scene.remove(child);
+        if ('geometry' in child) (child as any).geometry?.dispose();
+        if ('material' in child) {
+          const mat = (child as any).material;
+          if (mat) {
+            if (Array.isArray(mat)) {
+              mat.forEach((m: any) => m?.dispose());
+            } else {
+              mat.dispose();
+            }
           }
         }
-      }
-    });
-    
-    // ALWAYS create hole (black circle with white ring)
-    const holeRadius = 0.15;
-    
-    // Black hole
-    const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
-    const holeMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x000000,
-      side: THREE.DoubleSide,
-      depthWrite: true
-    });
-    const hole = new THREE.Mesh(holeGeometry, holeMaterial);
-    hole.rotation.x = -Math.PI / 2;
-    hole.position.set(0, 0.02, holeZ);
-    hole.userData.isHole = true;
-    hole.renderOrder = 1;
-    scene.add(hole);
-    
-    // White ring for visibility
-    const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0xffffff,
-      side: THREE.DoubleSide,
-      depthWrite: true
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(0, 0.021, holeZ);
-    ring.userData.isHole = true;
-    ring.renderOrder = 2;
-    scene.add(ring);
-    
-    // ALWAYS create flagstick and flag
-    const flagstickHeight = mode === 'swing' && distanceFeet > 100 ? 6 : 3.5;
-    const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
-    const flagstickMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x333333,
-      metalness: 0.3,
-      roughness: 0.7
-    });
-    const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
-    flagstick.position.set(0, flagstickHeight / 2, holeZ);
-    flagstick.userData.isFlagstick = true;
-    flagstick.castShadow = true;
-    scene.add(flagstick);
-    
-    // Create flag - scale based on distance for visibility
-    const flagScale = mode === 'swing' && distanceFeet > 100 ? 2.0 : 1.0;
-    const flagWidth = 1.2 * flagScale;
-    const flagHeight = 0.8 * flagScale;
-    const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
-    const flagMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xff0000,
-      side: THREE.DoubleSide,
-      emissive: 0xff0000,
-      emissiveIntensity: 0.15
-    });
-    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-    flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
-    flag.userData.isFlag = true;
-    scene.add(flag);
-    
-    // Store hole position globally
-    (window as any).currentHolePosition = { x: 0, y: 0.01, z: holeZ };
-    
-    // Hole/Flag created
-    return holeZ;
-  }, []);
-  
+      });
+
+      // ALWAYS create hole (black circle with white ring)
+      const holeRadius = 0.15;
+
+      // Black hole
+      const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
+      const holeMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      });
+      const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+      hole.rotation.x = -Math.PI / 2;
+      hole.position.set(0, 0.02, holeZ);
+      hole.userData.isHole = true;
+      hole.renderOrder = 1;
+      scene.add(hole);
+
+      // White ring for visibility
+      const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.021, holeZ);
+      ring.userData.isHole = true;
+      ring.renderOrder = 2;
+      scene.add(ring);
+
+      // ALWAYS create flagstick and flag
+      const flagstickHeight = mode === 'swing' && distanceFeet > 100 ? 6 : 3.5;
+      const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
+      const flagstickMaterial = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        metalness: 0.3,
+        roughness: 0.7,
+      });
+      const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
+      flagstick.position.set(0, flagstickHeight / 2, holeZ);
+      flagstick.userData.isFlagstick = true;
+      flagstick.castShadow = true;
+      scene.add(flagstick);
+
+      // Create flag - scale based on distance for visibility
+      const flagScale = mode === 'swing' && distanceFeet > 100 ? 2.0 : 1.0;
+      const flagWidth = 1.2 * flagScale;
+      const flagHeight = 0.8 * flagScale;
+      const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
+      const flagMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        side: THREE.DoubleSide,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.15,
+      });
+      const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+      flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
+      flag.userData.isFlag = true;
+      scene.add(flag);
+
+      // Store hole position globally
+      (window as any).currentHolePosition = { x: 0, y: 0.01, z: holeZ };
+
+      // Hole/Flag created
+      return holeZ;
+    },
+    []
+  );
+
   // Effect to handle hole/flag updates when dependencies change
   useEffect(() => {
     if (!sceneRef.current) return;
-    
+
     const scene = sceneRef.current;
-    
+
     // Calculate distance based on mode
     let distanceFeet: number;
     if (gameMode === 'swing') {
@@ -218,10 +222,10 @@ export default function ExpoGL3DView({
     } else {
       distanceFeet = puttingData.holeDistance;
     }
-    
+
     // Create hole and flag
     const holeZ = createHoleAndFlag(scene, distanceFeet, gameMode);
-    
+
     // Adjust camera for swing mode
     if (cameraRef.current && gameMode === 'swing') {
       const camera = cameraRef.current;
@@ -232,15 +236,46 @@ export default function ExpoGL3DView({
       setCameraRadius(150);
       scene.fog = null;
     }
-  }, [sceneRef.current, puttingData.swingHoleYards, puttingData.holeDistance, gameMode, currentLevel]); // Removed createHoleAndFlag to prevent infinite loop
+  }, [
+    sceneRef.current,
+    puttingData.swingHoleYards,
+    puttingData.holeDistance,
+    gameMode,
+    currentLevel,
+  ]); // Removed createHoleAndFlag to prevent infinite loop
 
   // Handle game mode changes - just update green size
   useEffect(() => {
     if (!sceneRef.current) return;
-    
+
+    const scene = sceneRef.current;
+
+    // Remove all slope visualizations when in swing mode
+    if (gameMode === 'swing' || puttingData.swingHoleYards) {
+      const slopeElements = scene.children.filter(
+        child =>
+          child.userData &&
+          (child.userData.isSlopeOverlay ||
+            child.userData.isSlopeArrow ||
+            child.userData.isSlopeIndicator)
+      );
+      slopeElements.forEach(element => {
+        scene.remove(element);
+        if ((element as THREE.Mesh).geometry) (element as THREE.Mesh).geometry.dispose();
+        if ((element as THREE.Mesh).material) {
+          const material = (element as THREE.Mesh).material;
+          if (Array.isArray(material)) {
+            material.forEach(m => m.dispose());
+          } else {
+            material.dispose();
+          }
+        }
+      });
+    }
+
     const updateGreenSize = (window as any).updateGreenSize;
     if (!updateGreenSize) return;
-    
+
     if (gameMode === 'swing') {
       // Restore large green for swing mode
       updateGreenSize(300); // 300 feet green for swing mode
@@ -248,7 +283,7 @@ export default function ExpoGL3DView({
       // Use actual hole distance for putt mode
       updateGreenSize(puttingData.holeDistance);
     }
-  }, [gameMode, puttingData.holeDistance]);
+  }, [gameMode, puttingData.holeDistance, puttingData.swingHoleYards]);
 
   // Add automatic camera rotation (can be disabled when user interacts)
   useEffect(() => {
@@ -289,43 +324,47 @@ export default function ExpoGL3DView({
       // This ensures consistency across all modes
       if (sceneRef.current) {
         const scene = sceneRef.current;
-        
+
         // Remove old hole/flag elements
-        const toRemove = scene.children.filter(child => 
-          child.userData?.isFlag || 
-          child.userData?.isFlagstick ||
-          child.userData?.isHole
+        const toRemove = scene.children.filter(
+          child => child.userData?.isFlag || child.userData?.isFlagstick || child.userData?.isHole
         );
         toRemove.forEach(child => {
           scene.remove(child);
           if ('geometry' in child) (child as any).geometry?.dispose();
           if ('material' in child) (child as any).material?.dispose();
         });
-        
+
         // Recreate at new position
         const createHoleAndFlagInline = (distanceFeet: number) => {
           const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
           const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(distanceFeet) : 1.0;
-          const holeZ = 4 - (distanceFeet * worldUnitsPerFoot);
-          
+          const holeZ = 4 - distanceFeet * worldUnitsPerFoot;
+
           // Create hole elements (same as in initial creation)
           const holeRadius = 0.15;
           const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
-          const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+          const holeMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            side: THREE.DoubleSide,
+          });
           const hole = new THREE.Mesh(holeGeometry, holeMaterial);
           hole.rotation.x = -Math.PI / 2;
           hole.position.set(0, 0.02, holeZ);
           hole.userData.isHole = true;
           scene.add(hole);
-          
+
           const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
-          const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+          const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            side: THREE.DoubleSide,
+          });
           const ring = new THREE.Mesh(ringGeometry, ringMaterial);
           ring.rotation.x = -Math.PI / 2;
           ring.position.set(0, 0.021, holeZ);
           ring.userData.isHole = true;
           scene.add(ring);
-          
+
           const flagstickHeight = 3.5;
           const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
           const flagstickMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
@@ -333,19 +372,22 @@ export default function ExpoGL3DView({
           flagstick.position.set(0, flagstickHeight / 2, holeZ);
           flagstick.userData.isFlagstick = true;
           scene.add(flagstick);
-          
+
           const flagGeometry = new THREE.PlaneGeometry(1.2, 0.8);
-          const flagMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xff0000, side: THREE.DoubleSide, emissive: 0xff0000, emissiveIntensity: 0.15
+          const flagMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            side: THREE.DoubleSide,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.15,
           });
           const flag = new THREE.Mesh(flagGeometry, flagMaterial);
           flag.position.set(0.6, flagstickHeight - 0.4, holeZ);
           flag.userData.isFlag = true;
           scene.add(flag);
-          
+
           return { x: 0, y: 0.01, z: holeZ };
         };
-        
+
         const newHolePos = createHoleAndFlagInline(puttingData.holeDistance);
         (window as any).currentHolePosition = newHolePos;
         // Hole position updated
@@ -364,23 +406,22 @@ export default function ExpoGL3DView({
       // Auto-adjust camera zoom based on actual hole position using centralized scaling
       const distanceFeet = puttingData.holeDistance;
       const BASE_RADIUS = 8; // Base radius for short putts
-      
+
       // Use centralized scaling function
       const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
       const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(distanceFeet) : 1.0;
-      
+
       const ballZ = 4;
-      const holeZ = ballZ - (distanceFeet * worldUnitsPerFoot);
+      const holeZ = ballZ - distanceFeet * worldUnitsPerFoot;
       const totalSceneDepth = Math.abs(ballZ - holeZ); // Total Z distance from ball to hole
-      
+
       // Camera needs to see from ball (Z=4) to hole (Z=holeZ)
       // Further increase multiplier to ensure hole is always fully visible
       const requiredRadius = totalSceneDepth * 1.8; // Increased to 1.8 for much better visibility
       const newRadius = Math.max(BASE_RADIUS, Math.min(requiredRadius, 40)); // Increased cap to 40
-      
+
       // Camera zoom calculated based on hole position
-      
-      
+
       setCameraRadius(newRadius);
       // Camera zoom adjusted
 
@@ -394,14 +435,14 @@ export default function ExpoGL3DView({
     // Set up renderer
     const renderer = new Renderer({ gl });
     renderer.setSize(drawingBufferWidth, drawingBufferHeight);
-    renderer.setClearColor(0x87CEEB); // Sky blue for swing mode
+    renderer.setClearColor(0x87ceeb); // Sky blue for swing mode
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Enable depth testing
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
-    
+
     // Set WebGL clear color to match THREE.js
     gl.clearColor(0.5, 0.8, 0.9, 1.0); // Sky blue instead of pink
 
@@ -416,7 +457,7 @@ export default function ExpoGL3DView({
       50,
       drawingBufferWidth / drawingBufferHeight,
       0.1,
-      500  // Extended to see far distances in swing mode
+      500 // Extended to see far distances in swing mode
     );
     camera.position.set(0, 8, 12);
     // Start looking slightly down for better framing
@@ -454,28 +495,36 @@ export default function ExpoGL3DView({
     const bounceLight = new THREE.DirectionalLight(0x90ee90, 0.2); // Light green bounce
     bounceLight.position.set(0, -5, 10);
     scene.add(bounceLight);
-    
+
     // Rim light for depth and atmosphere
     const rimLight = new THREE.DirectionalLight(0xffffff, 0.15);
     rimLight.position.set(0, 8, -20);
     scene.add(rimLight);
 
     // Dynamic green size based on hole distance - scales for long putts
-    const createAdaptiveGreen = (holeDistanceFeet: number) => {
+    const createAdaptiveGreen = (holeDistanceFeet: number, isSwingMode: boolean = false) => {
       // console.log(`🏌️ Creating adaptive green for ${holeDistanceFeet}ft putt`);
-      
+
+      // For swing mode, create a large fairway
+      if (isSwingMode) {
+        const radius = 100; // Large fairway area
+        const segments = 64;
+        const geometry = new THREE.CircleGeometry(radius, segments);
+        return { geometry, radius };
+      }
+
       // Scale green size based on distance: minimum 8 units, max 40 units
       // Short putts (8ft): 8 unit radius
-      // Medium putts (50ft): 20 unit radius  
+      // Medium putts (50ft): 20 unit radius
       // Long putts (200ft): 40 unit radius
       const minRadius = 8;
       const maxRadius = 40;
       const scaleFactor = Math.min(maxRadius / minRadius, Math.max(1, holeDistanceFeet / 8));
       const radius = minRadius * scaleFactor;
-      
+
       const segments = Math.min(128, Math.max(32, Math.floor(radius * 4))); // More segments for larger greens
       const geometry = new THREE.CircleGeometry(radius, segments);
-      
+
       // console.log(`✅ Adaptive green created: ${radius.toFixed(1)} unit radius for ${holeDistanceFeet}ft`);
       return { geometry, radius };
     };
@@ -490,7 +539,7 @@ export default function ExpoGL3DView({
       // Professional golf green base color - bright and vibrant
       ctx.fillStyle = '#4db84d'; // Brighter, more vibrant green
       ctx.fillRect(0, 0, 512, 512);
-      
+
       // Simple mowing pattern stripes
       const stripeWidth = 32;
       for (let i = 0; i < 512; i += stripeWidth * 2) {
@@ -505,6 +554,49 @@ export default function ExpoGL3DView({
         const brightness = Math.random() * 30 + 20;
         ctx.fillStyle = `rgba(${brightness}, ${100 + brightness}, ${brightness}, 0.3)`;
         ctx.fillRect(x, y, 2, 2);
+      }
+
+      return new THREE.CanvasTexture(canvas);
+    };
+
+    // Create fairway texture for swing challenges - longer grass, more variation
+    const createFairwayTexture = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d')!;
+
+      // Fairway base color - darker, more natural green
+      ctx.fillStyle = '#3a7d3a';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Add fairway stripe pattern (wider than green)
+      const stripeWidth = 64;
+      for (let i = 0; i < 512; i += stripeWidth * 2) {
+        ctx.fillStyle = 'rgba(50, 100, 50, 0.25)';
+        ctx.fillRect(i, 0, stripeWidth, 512);
+      }
+
+      // Add more texture variation for fairway
+      for (let i = 0; i < 300; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const size = Math.random() * 3 + 1;
+        const brightness = Math.random() * 40 + 10;
+        ctx.fillStyle = `rgba(${brightness}, ${80 + brightness}, ${brightness}, 0.4)`;
+        ctx.fillRect(x, y, size, size);
+      }
+
+      // Add some lighter patches
+      for (let i = 0; i < 50; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const radius = Math.random() * 20 + 10;
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        gradient.addColorStop(0, 'rgba(100, 150, 100, 0.2)');
+        gradient.addColorStop(1, 'rgba(100, 150, 100, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
       }
 
       return new THREE.CanvasTexture(canvas);
@@ -586,23 +678,28 @@ export default function ExpoGL3DView({
     };
 
     // Initialize adaptive green that scales with distance
-    let currentGreenData = createAdaptiveGreen(puttingData.holeDistance);
+    const isSwingChallenge =
+      gameMode === 'swing' || (puttingData.swingHoleYards && puttingData.swingHoleYards > 0);
+    const currentGreenData = createAdaptiveGreen(
+      isSwingChallenge ? (puttingData.swingHoleYards || 100) * 3 : puttingData.holeDistance,
+      isSwingChallenge || false
+    );
     let currentGreenRadius = currentGreenData.radius;
-    
+
     // Store green radius globally for trajectory calculations
     (window as any).currentGreenRadius = currentGreenRadius;
 
-    // Use enhanced material with existing premium grass texture
-    const grassTexture = createPremiumGrassTexture();
+    // Use fairway texture for swing challenges, green texture for putting
+    const grassTexture = isSwingChallenge ? createFairwayTexture() : createPremiumGrassTexture();
     grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(4, 4); // More tiling for finer detail
+    grassTexture.repeat.set(isSwingChallenge ? 8 : 4, isSwingChallenge ? 8 : 4); // More tiling for fairway
     grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    
+
     const greenMaterial = new THREE.MeshStandardMaterial({
       map: grassTexture,
-      color: 0x4caf50, // Maintain the same base green color
-      roughness: 0.8, // Grass has some roughness
-      metalness: 0.0, // Grass is not metallic
+      color: isSwingChallenge ? 0x3a7d3a : 0x4caf50, // Darker green for fairway
+      roughness: 0.8,
+      metalness: 0.0,
       side: THREE.DoubleSide,
     });
 
@@ -614,35 +711,11 @@ export default function ExpoGL3DView({
     green.userData.isGreen = true; // Mark for updates
     scene.add(green);
 
-    // Add slope overlay if there's significant slope
-    let slopeOverlayMesh: THREE.Mesh | null = null;
-    const updateSlopeOverlay = (slopeUpDown: number, slopeLeftRight: number) => {
-      // Remove existing overlay
-      if (slopeOverlayMesh) {
-        scene.remove(slopeOverlayMesh);
-        slopeOverlayMesh = null;
-      }
+    // Slope overlay removed to prevent white streaks
 
-      const slopeTexture = createSlopeOverlay(slopeUpDown, slopeLeftRight);
-      if (slopeTexture) {
-        const overlayMaterial = new THREE.MeshBasicMaterial({
-          map: slopeTexture,
-          transparent: true,
-          opacity: 0.3, // Reduced opacity so green shows through
-          depthWrite: false,
-        });
-
-        const overlayGeometry = new THREE.PlaneGeometry(16, 16);
-        slopeOverlayMesh = new THREE.Mesh(overlayGeometry, overlayMaterial);
-        slopeOverlayMesh.rotation.x = -Math.PI / 2;
-        slopeOverlayMesh.position.y = 0.005; // Slightly above green
-        scene.add(slopeOverlayMesh);
-      }
-    };
-
-    // NEW APPROACH: Visual slope indicators instead of geometry changes
+    // Slope indicators removed to prevent white arrows and overlays
     const createSlopeIndicators = (slopeUpDown: number, slopeLeftRight: number) => {
-      // Remove existing slope indicators
+      // Remove any existing slope indicators
       const existingIndicators = scene.children.filter(
         child => child.userData && child.userData.isSlopeIndicator
       );
@@ -659,109 +732,17 @@ export default function ExpoGL3DView({
         }
       });
 
-      if (slopeUpDown === 0 && slopeLeftRight === 0) return; // No indicators needed
-
-      // console.log('🔺 Creating visual slope indicators:', { slopeUpDown, slopeLeftRight });
-
-      // Create subtle transparent arrows scattered across the green
-      const totalSlope = Math.sqrt(slopeUpDown * slopeUpDown + slopeLeftRight * slopeLeftRight);
-      if (totalSlope > 0) {
-        // Calculate slope direction - FIXED: arrows should point where ball flows (opposite of slope)
-        const ballFlowAngle = Math.atan2(-slopeLeftRight, slopeUpDown); // Ball flows opposite to slope
-
-        // Create small, elegant arrow geometry
-        const arrowShape = new THREE.Shape();
-        arrowShape.moveTo(0, 0.2); // Arrow tip
-        arrowShape.lineTo(-0.08, -0.1); // Left base
-        arrowShape.lineTo(-0.03, -0.07); // Left inner
-        arrowShape.lineTo(0, -0.05); // Center back
-        arrowShape.lineTo(0.03, -0.07); // Right inner
-        arrowShape.lineTo(0.08, -0.1); // Right base
-        arrowShape.lineTo(0, 0.2); // Back to tip
-
-        const arrowGeometry = new THREE.ShapeGeometry(arrowShape);
-
-        // Subtle color based on slope type
-        const arrowColor =
-          slopeUpDown > 0
-            ? 0xffffff // White for uphill
-            : slopeUpDown < 0
-              ? 0xe8f4fd // Very light blue for downhill
-              : 0xf0f8f0; // Very light green for side slopes
-
-        const arrowMaterial = new THREE.MeshBasicMaterial({
-          color: arrowColor,
-          transparent: true,
-          opacity: 0.4, // Subtle transparency
-          side: THREE.DoubleSide,
-        });
-
-        // Number of arrows correlates directly with slope intensity
-        // 1 degree = 1 arrow, 2 degrees = 2 arrows, etc. (max 15 arrows for readability)
-        const numArrows = Math.min(15, Math.max(1, Math.round(totalSlope)));
-        const greenRadius = ((window as any).currentGreenRadius || 8) * 0.8; // Stay within green bounds, scale with green size
-
-        for (let i = 0; i < numArrows; i++) {
-          // Random position within green circle
-          const angle = (i / numArrows) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
-          const distance = Math.random() * greenRadius * 0.8; // Don't go to very edge
-          const x = Math.cos(angle) * distance;
-          const z = Math.sin(angle) * distance;
-
-          const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial.clone());
-          arrow.position.set(x, 0.02, z); // Just above green surface
-          arrow.rotation.x = -Math.PI / 2; // Lay flat on green
-          arrow.rotation.z = ballFlowAngle + (Math.random() - 0.5) * 0.3; // Point where ball flows with slight variation
-          arrow.scale.set(0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4, 1); // Slight size variation
-          arrow.userData.isSlopeIndicator = true;
-          scene.add(arrow);
-        }
-
-        // console.log(`✅ Created ${numArrows} subtle slope arrows`);
-      }
-
-      // Create colored overlay on green to show slope intensity
-      const overlayCanvas = document.createElement('canvas');
-      overlayCanvas.width = 256;
-      overlayCanvas.height = 256;
-      const ctx = overlayCanvas.getContext('2d')!;
-
-      // Create gradient based on slope
-      const intensity = Math.min(Math.abs(slopeUpDown) + Math.abs(slopeLeftRight), 20) / 20;
-      const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-
-      if (slopeUpDown > 0) {
-        gradient.addColorStop(0, `rgba(255, 100, 100, ${intensity * 0.3})`); // Red for uphill
-        gradient.addColorStop(1, `rgba(255, 100, 100, ${intensity * 0.1})`);
-      } else if (slopeUpDown < 0) {
-        gradient.addColorStop(0, `rgba(100, 100, 255, ${intensity * 0.3})`); // Blue for downhill
-        gradient.addColorStop(1, `rgba(100, 100, 255, ${intensity * 0.1})`);
-      }
-
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 256, 256);
-
-      // Add slope overlay to green
-      const overlayTexture = new THREE.CanvasTexture(overlayCanvas);
-      const overlayMaterial = new THREE.MeshBasicMaterial({
-        map: overlayTexture,
-        transparent: true,
-        opacity: 0.6,
-      });
-
-      const overlayGeometry = new THREE.CircleGeometry(8, 64);
-      const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
-      overlay.rotation.x = -Math.PI / 2;
-      overlay.position.y = 0.01; // Slightly above green
-      overlay.userData.isSlopeIndicator = true;
-      scene.add(overlay);
-
-      // console.log('✅ Visual slope indicators created successfully');
+      // Don't create any visual indicators - slopes still affect physics
     };
 
     // Store references - green never changes, only indicators change
     (window as any).greenMesh = green; // Green stays the same always
     (window as any).createSlopeIndicators = createSlopeIndicators;
+
+    // IMPORTANT: Don't create slope indicators in swing mode
+    if (gameMode === 'swing' || puttingData.swingHoleYards) {
+      console.log('🚫 Skipping slope indicators - swing mode active');
+    }
 
     // console.log('✅ Realistic circular green created with slope support:', {
     //   slopeUpDown: puttingData.slopeUpDown,
@@ -807,7 +788,9 @@ export default function ExpoGL3DView({
       // Calculate how far ball should actually travel using centralized scaling
       const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
       const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
-      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(data.holeDistance) : 1.0;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot
+        ? getWorldUnitsPerFoot(data.holeDistance)
+        : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
 
       // Aim direction (same as animation)
@@ -847,7 +830,11 @@ export default function ExpoGL3DView({
 
         // Stop if velocity is too low or ball is off the green (adaptive boundary)
         const greenBoundary = currentGreenRadius * 1.2; // Use current green size
-        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > greenBoundary || Math.abs(currentPos.z) > greenBoundary) {
+        if (
+          currentSpeed < 0.05 ||
+          Math.abs(currentPos.x) > greenBoundary ||
+          Math.abs(currentPos.z) > greenBoundary
+        ) {
           break;
         }
 
@@ -903,7 +890,7 @@ export default function ExpoGL3DView({
     // Create aim line visualization (straight line without slope/green speed effects)
     let aimLine: THREE.Line | null = null;
     let lastAimLineState = { show: false, data: null };
-    
+
     const updateAimLineVisualization = (show: boolean, data: any) => {
       // Only update if state actually changed
       const stateChanged =
@@ -926,7 +913,7 @@ export default function ExpoGL3DView({
 
       // Create straight aim line (no slope or green speed effects)
       const startPos = new THREE.Vector3(0, 0.12, 4); // Slightly above ball
-      
+
       // Calculate aim direction
       const aimRadians = (data.aimAngle * Math.PI) / 180;
       const aimDirection = {
@@ -938,24 +925,26 @@ export default function ExpoGL3DView({
       const targetDistanceFeet = data.distance;
       const powerPercent = data.power;
       const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
-      
+
       // Convert to world units using centralized scaling
       const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
-      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(data.holeDistance) : 1.0;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot
+        ? getWorldUnitsPerFoot(data.holeDistance)
+        : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
 
       // Create straight line points (no physics, no slope effects)
       const points: THREE.Vector3[] = [];
       const numPoints = 20; // Fewer points for straight line
-      
+
       for (let i = 0; i <= numPoints; i++) {
         const t = i / numPoints;
         const distance = intendedDistanceWorld * t;
-        
-        const x = startPos.x + (aimDirection.x * distance);
+
+        const x = startPos.x + aimDirection.x * distance;
         const y = 0.12; // Constant height
-        const z = startPos.z + (aimDirection.z * distance);
-        
+        const z = startPos.z + aimDirection.z * distance;
+
         points.push(new THREE.Vector3(x, y, z));
       }
 
@@ -979,7 +968,7 @@ export default function ExpoGL3DView({
     // Store reference for updates
     (window as any).updateAimLineVisualization = updateAimLineVisualization;
 
-    // Create slope visualization overlay
+    // Create slope visualization overlay - ONLY for putting mode
     const createSlopeVisualization = (slopeUpDown: number, slopeLeftRight: number) => {
       // Remove existing slope overlays
       const existingOverlays = scene.children.filter(
@@ -987,110 +976,11 @@ export default function ExpoGL3DView({
       );
       existingOverlays.forEach(overlay => scene.remove(overlay));
 
-      if (slopeUpDown === 0 && slopeLeftRight === 0) return; // No slope to visualize
+      // Don't show any slope visualization in swing mode or swing challenges
+      if (gameMode === 'swing' || puttingData.swingHoleYards) return;
 
-      // 1. Create gradient overlay based on slope direction and intensity
-      const overlayCanvas = document.createElement('canvas');
-      overlayCanvas.width = 256;
-      overlayCanvas.height = 256;
-      const overlayCtx = overlayCanvas.getContext('2d')!;
-
-      // Create radial gradient that shows slope intensity
-      const gradient = overlayCtx.createRadialGradient(128, 128, 0, 128, 128, 128);
-
-      // Color intensity based on slope magnitude (more sensitive)
-      const totalSlope = Math.sqrt(slopeUpDown * slopeUpDown + slopeLeftRight * slopeLeftRight);
-      const intensity = Math.min(totalSlope / 10, 1); // More sensitive normalization
-
-      // Different colors for different slope types
-      if (slopeUpDown > 0) {
-        // Uphill - Red tones (harder)
-        gradient.addColorStop(0, `rgba(255, 100, 100, ${intensity * 0.4})`);
-        gradient.addColorStop(1, `rgba(255, 50, 50, ${intensity * 0.1})`);
-      } else if (slopeUpDown < 0) {
-        // Downhill - Blue tones (faster)
-        gradient.addColorStop(0, `rgba(100, 150, 255, ${intensity * 0.4})`);
-        gradient.addColorStop(1, `rgba(50, 100, 255, ${intensity * 0.1})`);
-      }
-
-      // Add left/right slope indication with yellow tones
-      if (Math.abs(slopeLeftRight) > 0) {
-        const leftRightIntensity = Math.abs(slopeLeftRight) / 20;
-        overlayCtx.fillStyle = `rgba(255, 255, 100, ${leftRightIntensity * 0.3})`;
-        overlayCtx.fillRect(0, 0, 256, 256);
-      }
-
-      overlayCtx.fillStyle = gradient;
-      overlayCtx.fillRect(0, 0, 256, 256);
-
-      // 2. Add directional contour lines (more prominent)
-      overlayCtx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.6, intensity)})`;
-      overlayCtx.lineWidth = 3;
-      overlayCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      overlayCtx.shadowBlur = 2;
-
-      // Draw slope direction lines
-      const slopeAngle = Math.atan2(slopeLeftRight, -slopeUpDown); // Negative because up is negative Z
-      const lineCount = Math.max(3, Math.ceil(intensity * 10));
-
-      for (let i = 0; i < lineCount; i++) {
-        const offset = (i - lineCount / 2) * 15;
-        const startX = 128 + Math.cos(slopeAngle + Math.PI / 2) * offset;
-        const startY = 128 + Math.sin(slopeAngle + Math.PI / 2) * offset;
-        const endX = startX + Math.cos(slopeAngle) * 80;
-        const endY = startY + Math.sin(slopeAngle) * 80;
-
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(startX, startY);
-        overlayCtx.lineTo(endX, endY);
-        overlayCtx.stroke();
-      }
-
-      // Add additional circular contour lines for elevation
-      overlayCtx.strokeStyle = `rgba(255, 255, 100, ${intensity * 0.4})`;
-      overlayCtx.lineWidth = 1;
-      for (let r = 30; r < 120; r += 20) {
-        overlayCtx.beginPath();
-        overlayCtx.arc(128, 128, r, 0, Math.PI * 2);
-        overlayCtx.stroke();
-      }
-
-      const slopeTexture = new THREE.CanvasTexture(overlayCanvas);
-      const slopeOverlayMaterial = new THREE.MeshBasicMaterial({
-        map: slopeTexture,
-        transparent: true,
-        opacity: 0.6,
-        depthWrite: false,
-      });
-
-      const currentRadius = (window as any).currentGreenRadius || 8;
-      const adaptiveOverlayGeometry = new THREE.CircleGeometry(currentRadius, 64);
-      const slopeOverlay = new THREE.Mesh(adaptiveOverlayGeometry, slopeOverlayMaterial);
-      slopeOverlay.rotation.x = -Math.PI / 2;
-      slopeOverlay.position.y = 0.005; // Higher above green for better visibility
-      slopeOverlay.userData.isSlopeOverlay = true;
-      scene.add(slopeOverlay);
-
-      // 3. Add 3D slope direction arrow
-      if (totalSlope > 1) {
-        const arrowGeometry = new THREE.ConeGeometry(0.3, 1, 8);
-        const arrowMaterial = new THREE.MeshLambertMaterial({
-          color: slopeUpDown > 0 ? 0xff6666 : slopeUpDown < 0 ? 0x6666ff : 0xffff66,
-        });
-        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
-
-        // Position arrow to show slope direction
-        const arrowDistance = 3;
-        arrow.position.set(
-          Math.sin(slopeAngle) * arrowDistance,
-          0.8,
-          Math.cos(slopeAngle) * arrowDistance
-        );
-        arrow.rotation.z = -slopeAngle;
-        arrow.rotation.x = Math.PI; // Point down toward green
-        arrow.userData.isSlopeArrow = true;
-        scene.add(arrow);
-      }
+      // For putting mode, we keep the existing slope physics but don't add visual overlays
+      // The slopes still affect ball physics, just no visual indicators
     };
 
     // Store reference for updates
@@ -1198,12 +1088,12 @@ export default function ExpoGL3DView({
           ctx.fill();
         }
       }
-      
+
       return new THREE.CanvasTexture(canvas);
     };
 
     const ballTexture = createProfessionalGolfBallTexture();
-    
+
     const ballMaterial = new THREE.MeshStandardMaterial({
       map: ballTexture,
       color: 0xffffff,
@@ -1221,11 +1111,11 @@ export default function ExpoGL3DView({
       // Adaptive world units per foot to keep hole visible while maintaining physics accuracy
       if (holeDistanceFeet <= 10) return 1.0; // 1:1 for short putts
       if (holeDistanceFeet <= 25) return 0.8; // 0.8:1 for medium putts
-      if (holeDistanceFeet <= 50) return 0.6; // 0.6:1 for longer putts  
+      if (holeDistanceFeet <= 50) return 0.6; // 0.6:1 for longer putts
       if (holeDistanceFeet <= 100) return 0.4; // 0.4:1 for long putts
       return 0.25; // 0.25:1 for very long putts
     };
-    
+
     // Store globally for trajectory calculations
     (window as any).getWorldUnitsPerFoot = getWorldUnitsPerFoot;
 
@@ -1234,7 +1124,7 @@ export default function ExpoGL3DView({
       const worldUnitsPerFoot = getWorldUnitsPerFoot(holeDistanceFeet);
       const ballZ = 4; // Ball always starts at Z=4
       const holeZ = ballZ - holeDistanceFeet * worldUnitsPerFoot;
-      
+
       // console.log(`🎯 HOLE POSITIONING: ${holeDistanceFeet}ft using ${worldUnitsPerFoot} units/ft = Z position ${holeZ.toFixed(1)}`);
       return { x: 0, y: 0.001, z: holeZ };
     };
@@ -1243,7 +1133,7 @@ export default function ExpoGL3DView({
       // Skip hole creation - unified flag system handles this
       const holePos = getHolePosition(holeDistanceFeet);
       return holePos;
-      
+
       /* OLD CODE - DISABLED
       // Create hole (perfect dark circle on the green)
       const holeRadius = 0.15; // Visible hole size
@@ -2533,42 +2423,42 @@ export default function ExpoGL3DView({
     } else {
       initialDistanceFeet = puttingData.holeDistance;
     }
-    
+
     // Create the initial hole and flag using our helper function
     const createInitialHole = () => {
       // Creating initial hole
-      
+
       // Use same logic as the effect but inline for initial creation
       const worldUnitsPerFoot = getWorldUnitsPerFoot(initialDistanceFeet);
-      const holeZ = 4 - (initialDistanceFeet * worldUnitsPerFoot);
-      
+      const holeZ = 4 - initialDistanceFeet * worldUnitsPerFoot;
+
       // Create hole visual elements
       const holeRadius = 0.15;
-      
+
       // Black hole
       const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
-      const holeMaterial = new THREE.MeshBasicMaterial({ 
+      const holeMaterial = new THREE.MeshBasicMaterial({
         color: 0x000000,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       });
       const hole = new THREE.Mesh(holeGeometry, holeMaterial);
       hole.rotation.x = -Math.PI / 2;
       hole.position.set(0, 0.02, holeZ);
       hole.userData.isHole = true;
       scene.add(hole);
-      
+
       // White ring
       const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
-      const ringMaterial = new THREE.MeshBasicMaterial({ 
+      const ringMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
       });
       const ring = new THREE.Mesh(ringGeometry, ringMaterial);
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(0, 0.021, holeZ);
       ring.userData.isHole = true;
       scene.add(ring);
-      
+
       // Flagstick
       const flagstickHeight = gameMode === 'swing' && initialDistanceFeet > 100 ? 6 : 3.5;
       const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
@@ -2577,26 +2467,26 @@ export default function ExpoGL3DView({
       flagstick.position.set(0, flagstickHeight / 2, holeZ);
       flagstick.userData.isFlagstick = true;
       scene.add(flagstick);
-      
+
       // Flag
       const flagScale = gameMode === 'swing' && initialDistanceFeet > 100 ? 2.0 : 1.0;
       const flagWidth = 1.2 * flagScale;
       const flagHeight = 0.8 * flagScale;
       const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
-      const flagMaterial = new THREE.MeshStandardMaterial({ 
+      const flagMaterial = new THREE.MeshStandardMaterial({
         color: 0xff0000,
         side: THREE.DoubleSide,
         emissive: 0xff0000,
-        emissiveIntensity: 0.15
+        emissiveIntensity: 0.15,
       });
       const flag = new THREE.Mesh(flagGeometry, flagMaterial);
       flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
       flag.userData.isFlag = true;
       scene.add(flag);
-      
+
       return { x: 0, y: 0.01, z: holeZ };
     };
-    
+
     const currentHolePosition = createInitialHole();
     (window as any).currentHolePosition = currentHolePosition;
     // Initial hole created
@@ -2606,76 +2496,76 @@ export default function ExpoGL3DView({
       // Create blimp body (ellipsoid shape)
       const blimpGeometry = new THREE.SphereGeometry(3, 32, 16);
       blimpGeometry.scale(1, 0.4, 0.4); // Stretch to blimp shape
-      
+
       const blimpMaterial = new THREE.MeshPhongMaterial({
         color: 0x8b0000, // Dark red
         emissive: 0x400000,
         emissiveIntensity: 0.2,
       });
-      
+
       const blimpBody = new THREE.Mesh(blimpGeometry, blimpMaterial);
       blimpBody.position.set(0, 15, -20); // High in the sky
       blimpBody.rotation.y = Math.PI / 4;
       blimpBody.userData.isBlimp = true;
       scene.add(blimpBody);
-      
+
       // Create "BAD YEAR" text on blimp
       const createBlimpText = () => {
         const canvas = document.createElement('canvas');
         canvas.width = 512;
         canvas.height = 128;
         const ctx = canvas.getContext('2d')!;
-        
+
         // Clear with transparency
         ctx.clearRect(0, 0, 512, 128);
-        
+
         // Draw text
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('BAD YEAR', 256, 64);
-        
+
         const textTexture = new THREE.CanvasTexture(canvas);
         const textMaterial = new THREE.SpriteMaterial({
           map: textTexture,
           transparent: true,
           depthWrite: false,
         });
-        
+
         const textSprite = new THREE.Sprite(textMaterial);
         textSprite.scale.set(6, 1.5, 1);
         textSprite.position.set(0, 15, -19.5); // Just in front of blimp
         textSprite.userData.isBlimp = true;
         scene.add(textSprite);
-        
+
         return textSprite;
       };
-      
+
       const blimpText = createBlimpText();
-      
+
       // Create particle trail system
       const particleCount = 50;
       const particles = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
       const colors = new Float32Array(particleCount * 3);
-      
+
       for (let i = 0; i < particleCount; i++) {
         // Initialize behind blimp
         positions[i * 3] = blimpBody.position.x - 3 - Math.random() * 5;
         positions[i * 3 + 1] = blimpBody.position.y + (Math.random() - 0.5) * 2;
         positions[i * 3 + 2] = blimpBody.position.z + (Math.random() - 0.5) * 2;
-        
+
         // Smoke color (greyish)
         const intensity = 0.5 + Math.random() * 0.5;
         colors[i * 3] = intensity;
         colors[i * 3 + 1] = intensity;
         colors[i * 3 + 2] = intensity;
       }
-      
+
       particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      
+
       const particleMaterial = new THREE.PointsMaterial({
         size: 0.3,
         vertexColors: true,
@@ -2683,11 +2573,11 @@ export default function ExpoGL3DView({
         opacity: 0.6,
         blending: THREE.AdditiveBlending,
       });
-      
+
       const particleSystem = new THREE.Points(particles, particleMaterial);
       particleSystem.userData.isBlimp = true;
       scene.add(particleSystem);
-      
+
       // Store references for animation
       (window as any).blimp = {
         body: blimpBody,
@@ -2697,7 +2587,7 @@ export default function ExpoGL3DView({
         time: 0,
       };
     };
-    
+
     createBlimp();
 
     // Store hole update function
@@ -2705,7 +2595,7 @@ export default function ExpoGL3DView({
       // DEPRECATED - Hole position now managed by effects and createHoleAndFlag function
       console.log('⚠️ updateHolePosition called (deprecated) - distance:', newHoleDistanceFeet);
       const worldUnitsPerFoot = getWorldUnitsPerFoot(newHoleDistanceFeet);
-      const holeZ = 4 - (newHoleDistanceFeet * worldUnitsPerFoot);
+      const holeZ = 4 - newHoleDistanceFeet * worldUnitsPerFoot;
       return { x: 0, y: 0.01, z: holeZ };
     };
 
@@ -2713,9 +2603,13 @@ export default function ExpoGL3DView({
     const updateGreenSize = (newHoleDistanceFeet: number) => {
       // Remove existing green and fringe
       const existingGreen = scene.children.find(child => child.userData && child.userData.isGreen);
-      const existingFringe = scene.children.find(child => child.userData && child.userData.isFringe);
-      const existingFairway = scene.children.find(child => child.userData && child.userData.isFairway);
-      
+      const existingFringe = scene.children.find(
+        child => child.userData && child.userData.isFringe
+      );
+      const existingFairway = scene.children.find(
+        child => child.userData && child.userData.isFairway
+      );
+
       if (existingGreen) {
         scene.remove(existingGreen);
         (existingGreen as THREE.Mesh).geometry.dispose();
@@ -2726,7 +2620,7 @@ export default function ExpoGL3DView({
           material.dispose();
         }
       }
-      
+
       if (existingFringe) {
         scene.remove(existingFringe);
         (existingFringe as THREE.Mesh).geometry.dispose();
@@ -2737,7 +2631,7 @@ export default function ExpoGL3DView({
           material.dispose();
         }
       }
-      
+
       if (existingFairway) {
         scene.remove(existingFairway);
         (existingFairway as THREE.Mesh).geometry.dispose();
@@ -2752,7 +2646,7 @@ export default function ExpoGL3DView({
       // Create new adaptive green
       const newGreenData = createAdaptiveGreen(newHoleDistanceFeet);
       currentGreenRadius = newGreenData.radius;
-      
+
       const newGreen = new THREE.Mesh(newGreenData.geometry, greenMaterial);
       newGreen.rotation.x = -Math.PI / 2;
       newGreen.position.y = 0;
@@ -2760,29 +2654,37 @@ export default function ExpoGL3DView({
       newGreen.castShadow = false;
       newGreen.userData.isGreen = true;
       scene.add(newGreen);
-      
+
       // Update stored references
       green = newGreen;
       (window as any).greenMesh = newGreen;
       (window as any).currentGreenRadius = currentGreenRadius; // Update global radius
 
       // Create new adaptive fringe
-      const newFringeGeometry = new THREE.RingGeometry(currentGreenRadius, currentGreenRadius * 1.5, 64);
+      const newFringeGeometry = new THREE.RingGeometry(
+        currentGreenRadius,
+        currentGreenRadius * 1.5,
+        64
+      );
       const newFringe = new THREE.Mesh(newFringeGeometry, fringeMaterial);
       newFringe.rotation.x = -Math.PI / 2;
       newFringe.position.y = -0.01;
       newFringe.receiveShadow = true;
       newFringe.userData.isFringe = true;
       scene.add(newFringe);
-      
+
       // Create new adaptive fairway
-      const newFairwayGeometry = new THREE.RingGeometry(currentGreenRadius * 1.5, currentGreenRadius * 2.5, 32);
+      const newFairwayGeometry = new THREE.RingGeometry(
+        currentGreenRadius * 1.5,
+        currentGreenRadius * 2.5,
+        32
+      );
       const newFairway = new THREE.Mesh(newFairwayGeometry, fairwayMaterial);
       newFairway.rotation.x = -Math.PI / 2;
       newFairway.position.y = -0.02;
       newFairway.userData.isFairway = true;
       scene.add(newFairway);
-      
+
       // console.log(`🏌️ Green resized to ${currentGreenRadius.toFixed(1)} units for ${newHoleDistanceFeet}ft putt`);
     };
 
@@ -2836,11 +2738,11 @@ export default function ExpoGL3DView({
     });
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
     scene.add(sky);
-    
+
     // NO FOG AT ALL - IT'S BREAKING SWING MODE
     // scene.fog = new THREE.Fog(0xe6f3ff, 30, 80);
     scene.fog = null; // COMPLETELY DISABLE FOG
-    
+
     // Skip adding distant trees for performance
 
     // Render loop
@@ -2855,13 +2757,13 @@ export default function ExpoGL3DView({
           // Swing mode - keep camera high and looking far
           if (puttingData.swingHoleYards) {
             const feet = puttingData.swingHoleYards * 3;
-            const holeZ = 4 - (feet * 0.25);
-            
+            const holeZ = 4 - feet * 0.25;
+
             // Keep camera looking at the flag position
             cameraRef.current.lookAt(0, 0, holeZ);
-            
+
             // Make sure FOV and far plane are correct
-            cameraRef.current.fov = 75;  // Wide FOV to see more
+            cameraRef.current.fov = 75; // Wide FOV to see more
             cameraRef.current.far = 1000; // Very far to see distant objects
             cameraRef.current.updateProjectionMatrix();
           }
@@ -2870,55 +2772,60 @@ export default function ExpoGL3DView({
           const x = Math.sin(cameraAngle) * cameraRadius;
           const z = Math.cos(cameraAngle) * cameraRadius;
           cameraRef.current.position.set(x, cameraHeight, z);
-          
+
           // Adjust look-at target based on distance to prevent dashboard clipping
-          const lookAtY = puttingData.holeDistance > 20 ? -2 : puttingData.holeDistance > 10 ? -1 : 0; // Look progressively lower for longer putts
+          const lookAtY =
+            puttingData.holeDistance > 20 ? -2 : puttingData.holeDistance > 10 ? -1 : 0; // Look progressively lower for longer putts
           cameraRef.current.lookAt(0, lookAtY, -2);
         }
-        
+
         // Animate blimp
         if ((window as any).blimp) {
           const blimp = (window as any).blimp;
           blimp.time += 0.005;
-          
+
           // Slow circular motion
           const radius = 25;
           const height = 15 + Math.sin(blimp.time * 0.5) * 2; // Gentle bobbing
           blimp.body.position.x = Math.cos(blimp.time) * radius;
           blimp.body.position.y = height;
           blimp.body.position.z = Math.sin(blimp.time) * radius - 10;
-          
+
           // Keep text aligned with blimp
           blimp.text.position.x = blimp.body.position.x;
           blimp.text.position.y = blimp.body.position.y;
           blimp.text.position.z = blimp.body.position.z + 0.5;
-          
+
           // Rotate blimp to face direction of movement
           blimp.body.rotation.y = -blimp.time + Math.PI / 2;
-          
+
           // Update particle trail
           const positions = blimp.particles.geometry.attributes.position.array;
           const particleCount = positions.length / 3;
-          
+
           // Shift particles back and add new ones at blimp position
           for (let i = particleCount - 1; i > 0; i--) {
             positions[i * 3] = positions[(i - 1) * 3];
             positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
             positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
           }
-          
+
           // Add new particle at blimp position with some randomness
           positions[0] = blimp.body.position.x - Math.cos(blimp.body.rotation.y) * 3;
           positions[1] = blimp.body.position.y + (Math.random() - 0.5) * 0.5;
           positions[2] = blimp.body.position.z - Math.sin(blimp.body.rotation.y) * 3;
-          
+
           blimp.particles.geometry.attributes.position.needsUpdate = true;
         }
 
         // SLOPE UPDATES NOW HANDLED BY useEffect - MUCH SIMPLER!
 
-        // Update slope visualization when slope values change
-        if ((window as any).updateSlopeVisualization) {
+        // Update slope visualization when slope values change (ONLY in putting mode)
+        if (
+          (window as any).updateSlopeVisualization &&
+          gameMode === 'putt' &&
+          !puttingData.swingHoleYards
+        ) {
           (window as any).updateSlopeVisualization(
             puttingData.slopeUpDown,
             puttingData.slopeLeftRight
@@ -2926,7 +2833,7 @@ export default function ExpoGL3DView({
         }
 
         // Robot stands still (no animation for better grounding)
-        
+
         // Animate all flags with realistic waving motion
         const time = Date.now() * 0.002; // Slower animation
         scene.children.forEach(child => {
@@ -2934,37 +2841,37 @@ export default function ExpoGL3DView({
             const geometry = (child as THREE.Mesh).geometry;
             const positions = geometry.attributes.position;
             const originalPositions = geometry.userData.originalPositions;
-            
+
             if (originalPositions && positions) {
               // Create realistic flag waving animation
               for (let i = 0; i < positions.count; i++) {
-                const originalX = originalPositions[i * 3];     // X position
+                const originalX = originalPositions[i * 3]; // X position
                 const originalY = originalPositions[i * 3 + 1]; // Y position
                 const originalZ = originalPositions[i * 3 + 2]; // Z position
-                
+
                 // Calculate wave based on position along flag (X axis)
                 const waveX = originalX / 0.8; // Normalize to 0-1 range
                 const waveIntensity = Math.max(0, waveX); // More wave toward the free edge
-                
+
                 // Create multiple wave frequencies for realistic movement
                 const wave1 = Math.sin(time * 3 + waveX * 4) * waveIntensity * 0.15;
                 const wave2 = Math.sin(time * 5 + waveX * 6) * waveIntensity * 0.08;
                 const wave3 = Math.sin(time * 7 + waveX * 8) * waveIntensity * 0.04;
-                
+
                 // Apply waves to Z position (depth) for realistic flutter
                 const newZ = originalZ + (wave1 + wave2 + wave3);
-                
+
                 // Add subtle Y movement for vertical flutter
                 const verticalWave = Math.sin(time * 4 + waveX * 3) * waveIntensity * 0.05;
                 const newY = originalY + verticalWave;
-                
+
                 // Update vertex position
                 positions.setXYZ(i, originalX, newY, newZ);
               }
-              
+
               // Mark positions as needing update
               positions.needsUpdate = true;
-              
+
               // Recompute normals for proper lighting
               geometry.computeVertexNormals();
             }
@@ -2977,31 +2884,31 @@ export default function ExpoGL3DView({
             const geometry = (child as THREE.Mesh).geometry;
             const positions = geometry.attributes.position;
             const originalPositions = geometry.userData.originalPositions;
-            
+
             if (originalPositions && positions) {
               // Create shadow animation that follows flag motion (projected)
               for (let i = 0; i < positions.count; i++) {
-                const originalX = originalPositions[i * 3];     // X position
+                const originalX = originalPositions[i * 3]; // X position
                 const originalY = originalPositions[i * 3 + 1]; // Y position (always 0 for ground shadow)
                 const originalZ = originalPositions[i * 3 + 2]; // Z position
-                
+
                 // Calculate wave based on position along shadow (same as flag)
                 const waveX = originalX / 0.8; // Normalize to 0-1 range
                 const waveIntensity = Math.max(0, waveX); // More wave toward the free edge
-                
+
                 // Create shadow waves (similar to flag but flattened and projected)
                 const wave1 = Math.sin(time * 3 + waveX * 4) * waveIntensity * 0.08; // Reduced intensity for shadow
                 const wave2 = Math.sin(time * 5 + waveX * 6) * waveIntensity * 0.04;
                 const wave3 = Math.sin(time * 7 + waveX * 8) * waveIntensity * 0.02;
-                
+
                 // Apply shadow distortion (X and Z movement, Y stays flat)
                 const newX = originalX + (wave1 + wave2 + wave3) * 0.5; // Shadow moves slightly
                 const newZ = originalZ + (wave1 + wave2 + wave3) * 0.3; // Shadow projects
-                
+
                 // Update shadow vertex position (Y stays 0 for ground projection)
                 positions.setXYZ(i, newX, originalY, newZ);
               }
-              
+
               // Mark positions as needing update
               positions.needsUpdate = true;
             }
@@ -3027,17 +2934,17 @@ export default function ExpoGL3DView({
   // Animate swing trajectory
   const animateSwingTrajectory = (flightResult: FlightResult) => {
     if (!ballRef.current || !sceneRef.current) return;
-    
+
     const ball = ballRef.current;
     const scene = sceneRef.current;
     const trajectory = flightResult.trajectory;
-    
+
     if (trajectory.length === 0) {
       setIsAnimating(false);
       onPuttComplete(flightResult);
       return;
     }
-    
+
     // Create trail for ball flight
     const trailGeometry = new THREE.BufferGeometry();
     const trailMaterial = new THREE.LineBasicMaterial({
@@ -3047,7 +2954,7 @@ export default function ExpoGL3DView({
     });
     const trailLine = new THREE.Line(trailGeometry, trailMaterial);
     scene.add(trailLine);
-    
+
     // Animate player robot swing
     const playerRobot = (window as any).playerRobot;
     if (playerRobot) {
@@ -3055,7 +2962,7 @@ export default function ExpoGL3DView({
       const originalRotation = playerRobot.rotation.z;
       let swingTime = 0;
       const swingDuration = 0.4;
-      
+
       const animateSwing = () => {
         swingTime += 0.016;
         if (swingTime < swingDuration) {
@@ -3073,12 +2980,12 @@ export default function ExpoGL3DView({
       };
       animateSwing();
     }
-    
+
     // Animate ball along trajectory
     let currentIndex = 0;
     const animationSpeed = 2; // Points per frame
     const trailPoints: THREE.Vector3[] = [];
-    
+
     // Convert trajectory to world coordinates
     // The putting green uses approximately 1 world unit = 3 feet
     // Trajectory points are in yards, need to convert to feet then to world units
@@ -3087,32 +2994,32 @@ export default function ExpoGL3DView({
       const feetX = point.x * 3;
       const feetY = point.y; // Already in feet
       const feetZ = point.z * 3;
-      
+
       // Convert feet to world units (1 world unit ≈ 3 feet)
       // This matches the putting scale where hole is at z=0 and ball starts at z=4
       const worldX = feetX / 3;
       const worldY = feetY / 3;
       const worldZ = -(feetZ / 3); // Negative Z goes toward hole
-      
+
       return new THREE.Vector3(worldX, worldY + 0.08, worldZ + 4); // Start from ball position
     });
-    
+
     const animateFlight = () => {
       if (currentIndex < worldTrajectory.length) {
         const point = worldTrajectory[currentIndex];
-        
+
         // Update ball position
         ball.position.copy(point);
-        
+
         // Add to trail
         trailPoints.push(point.clone());
         if (trailPoints.length > 20) trailPoints.shift(); // Keep trail short
-        
+
         // Update trail line
         if (trailPoints.length > 1) {
           trailGeometry.setFromPoints(trailPoints);
         }
-        
+
         // Update camera to follow ball for long shots
         // If the ball goes beyond the green (past the hole), adjust camera
         if (ball.position.z < -10 || Math.abs(ball.position.x) > 20) {
@@ -3122,7 +3029,7 @@ export default function ExpoGL3DView({
             camera.lookAt(ball.position);
           }
         }
-        
+
         currentIndex += animationSpeed;
         requestAnimationFrame(animateFlight);
       } else {
@@ -3131,10 +3038,10 @@ export default function ExpoGL3DView({
           scene.remove(trailLine);
           setIsAnimating(false);
           onPuttComplete(flightResult);
-          
+
           // Reset ball position
           ball.position.set(0, 0.08, 4);
-          
+
           // Reset camera to original position
           const camera = (window as any).camera;
           if (camera) {
@@ -3144,69 +3051,70 @@ export default function ExpoGL3DView({
         }, 1000);
       }
     };
-    
+
     animateFlight();
   };
-  
+
   // Handle putting/swinging animation
   useEffect(() => {
     if (isPutting && !isAnimating && ballRef.current) {
       setIsAnimating(true);
-      
+
       // Check if we're in swing mode
       if (gameMode === 'swing' && swingData) {
         // Use SwingPhysics
         const swingPhysics = new SwingPhysics(swingData);
         const flightResult = swingPhysics.calculateBallFlight();
-        
+
         // Animate the ball through the flight trajectory
         animateSwingTrajectory(flightResult);
         return;
       }
-      
+
       // Animate player robot putting stroke
       const playerRobot = (window as any).playerRobot;
       if (playerRobot) {
         // Store original position
         const originalX = playerRobot.position.x;
-        
+
         // Backstroke animation (move left away from ball)
         let strokeTime = 0;
         const strokeDuration = 0.5; // Half second for backstroke
         const backstrokeDistance = -0.2; // Move left 0.2 units
-        
+
         const animateStroke = () => {
           strokeTime += 0.016; // 60fps
-          
+
           if (strokeTime < strokeDuration) {
             // Move robot left during backstroke
             const progress = strokeTime / strokeDuration;
-            const easeProgress = Math.sin(progress * Math.PI / 2); // Ease out
-            playerRobot.position.x = originalX + (backstrokeDistance * easeProgress);
+            const easeProgress = Math.sin((progress * Math.PI) / 2); // Ease out
+            playerRobot.position.x = originalX + backstrokeDistance * easeProgress;
             requestAnimationFrame(animateStroke);
           } else {
             // Forward stroke (move right toward ball)
             let forwardTime = 0;
             const forwardDuration = 0.3; // Faster forward stroke
-            
+
             const animateForward = () => {
               forwardTime += 0.016;
-              
+
               if (forwardTime < forwardDuration) {
                 const progress = forwardTime / forwardDuration;
-                const easeProgress = 1 - Math.cos(progress * Math.PI / 2); // Ease in
-                playerRobot.position.x = originalX + backstrokeDistance - (backstrokeDistance * easeProgress * 1.5); // Overshoot slightly toward ball
+                const easeProgress = 1 - Math.cos((progress * Math.PI) / 2); // Ease in
+                playerRobot.position.x =
+                  originalX + backstrokeDistance - backstrokeDistance * easeProgress * 1.5; // Overshoot slightly toward ball
                 requestAnimationFrame(animateForward);
               } else {
                 // Return to original position
                 playerRobot.position.x = originalX;
               }
             };
-            
+
             animateForward();
           }
         };
-        
+
         animateStroke();
       }
 
@@ -3233,9 +3141,11 @@ export default function ExpoGL3DView({
 
       // Convert to world units using centralized scaling (CRITICAL FOR PHYSICS ACCURACY)
       const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
-      const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(puttingData.holeDistance) : 1.0;
+      const worldUnitsPerFoot = getWorldUnitsPerFoot
+        ? getWorldUnitsPerFoot(puttingData.holeDistance)
+        : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
-      
+
       // console.log('📎 PHYSICS SCALING:', {
       //   holeDistance: puttingData.holeDistance,
       //   worldUnitsPerFoot: worldUnitsPerFoot.toFixed(3),
@@ -3309,7 +3219,11 @@ export default function ExpoGL3DView({
 
         // Stop if velocity is too low or ball is off the green (adaptive boundary)
         const greenBoundary = ((window as any).currentGreenRadius || 8) * 1.2; // Use current green size for physics
-        if (currentSpeed < 0.05 || Math.abs(currentPos.x) > greenBoundary || Math.abs(currentPos.z) > greenBoundary) {
+        if (
+          currentSpeed < 0.05 ||
+          Math.abs(currentPos.x) > greenBoundary ||
+          Math.abs(currentPos.z) > greenBoundary
+        ) {
           break;
         }
 
@@ -3378,15 +3292,21 @@ export default function ExpoGL3DView({
           // UNIFIED HOLE POSITION CHECK - v8
           // Always use the global hole position for consistency
           const currentHolePos = (window as any).currentHolePosition || { x: 0, y: 0.08, z: -4 };
-          
+
           // Extra validation for swing challenges
           if (gameMode === 'putt' && puttingData.swingHoleYards && puttingData.holeDistance) {
             // Ensure hole is at the right distance for putting in swing challenge
             const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
             if (getWorldUnitsPerFoot) {
-              const expectedZ = 4 - (puttingData.holeDistance * getWorldUnitsPerFoot(puttingData.holeDistance));
+              const expectedZ =
+                4 - puttingData.holeDistance * getWorldUnitsPerFoot(puttingData.holeDistance);
               if (Math.abs(currentHolePos.z - expectedZ) > 0.5) {
-                console.warn('⚠️ Hole position may be incorrect. Expected Z:', expectedZ.toFixed(2), 'Actual:', currentHolePos.z.toFixed(2));
+                console.warn(
+                  '⚠️ Hole position may be incorrect. Expected Z:',
+                  expectedZ.toFixed(2),
+                  'Actual:',
+                  currentHolePos.z.toFixed(2)
+                );
                 // Update to correct position
                 currentHolePos.z = expectedZ;
                 (window as any).currentHolePosition = currentHolePos;
@@ -3411,9 +3331,11 @@ export default function ExpoGL3DView({
           // );
 
           // Get current ball speed for collision detection
-          const currentSpeed = currentStep > 0 ? 
-            trajectory[currentStep].distanceTo(trajectory[currentStep - 1]) / 0.05 : 0;
-          
+          const currentSpeed =
+            currentStep > 0
+              ? trajectory[currentStep].distanceTo(trajectory[currentStep - 1]) / 0.05
+              : 0;
+
           // Check for near miss rim-out (only if ball is close but not going in)
           if (distanceToHole > 0.15 && distanceToHole <= 0.25 && currentSpeed > 0.4) {
             // Ball rims out - it was close but too fast or off-center
@@ -3422,7 +3344,7 @@ export default function ExpoGL3DView({
               0,
               currentPos.z - currentHolePos.z
             ).normalize();
-            
+
             // Add rim-out animation (ball deflects away from hole)
             for (let i = 1; i <= 6; i++) {
               const rimPos = currentPos.clone();
@@ -3431,28 +3353,18 @@ export default function ExpoGL3DView({
               rimPos.z += rimOutDirection.z * i * 0.02 * decay;
               trajectory.push(rimPos);
             }
-            
+
             // Continue animation to show rim-out
             currentStep++;
             requestAnimationFrame(animateBall);
             return;
           }
-          
-          // UNIFIED HOLE DETECTION SYSTEM - v8
-          // Single source of truth for hole detection
-          const getHoleDetectionRadius = () => {
-            // In swing challenge putting, use larger radius since we're dealing with longer distances
-            if (gameMode === 'putt' && puttingData.swingHoleYards) {
-              // When putting in swing challenge, be more forgiving
-              return 0.25; // Increased from 0.2 for better detection
-            }
-            // Normal putting challenges
-            return 0.15;
-          };
-          
-          const holeDetectionRadius = getHoleDetectionRadius();
+
+          // UNIFIED HOLE DETECTION SYSTEM - v9
+          // Use consistent realistic physics for all modes
+          const holeDetectionRadius = PUTTING_PHYSICS.HOLE_DETECTION_RADIUS;
           const isGoingIn = distanceToHole <= holeDetectionRadius;
-          
+
           // Only log when ball is near hole to reduce spam
           if (distanceToHole < 1.0) {
             console.log('⛳ Hole detection:', {
@@ -3460,10 +3372,10 @@ export default function ExpoGL3DView({
               threshold: holeDetectionRadius,
               willGoIn: isGoingIn,
               mode: gameMode,
-              swingChallenge: !!puttingData.swingHoleYards
+              swingChallenge: !!puttingData.swingHoleYards,
             });
           }
-          
+
           if (isGoingIn) {
             // Ball goes in hole - animate it dropping into the hole
             // Create a simple drop animation
@@ -3475,10 +3387,10 @@ export default function ExpoGL3DView({
               dropPos.x = currentPos.x * (1 - t) + currentHolePos.x * t;
               dropPos.z = currentPos.z * (1 - t) + currentHolePos.z * t;
               // Drop the ball down into the hole
-              dropPos.y = Math.max(0, currentPos.y - (i * 0.015));
+              dropPos.y = Math.max(0, currentPos.y - i * 0.015);
               trajectory.push(dropPos);
             }
-            
+
             // After drop animation, make ball disappear
             setTimeout(() => {
               if (ballRef.current) {
@@ -3501,17 +3413,17 @@ export default function ExpoGL3DView({
               const robot = (window as any).robotAvatar;
               const scene = sceneRef.current;
               if (!robot || !scene) return;
-              
+
               // Create speech bubble
               const createSpeechBubble = (message: string, emoji: string = '🎉') => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 512;
                 canvas.height = 128;
                 const ctx = canvas.getContext('2d')!;
-                
+
                 // Clear canvas
                 ctx.clearRect(0, 0, 512, 128);
-                
+
                 // Draw bubble background
                 ctx.fillStyle = 'white';
                 ctx.strokeStyle = '#333';
@@ -3520,7 +3432,7 @@ export default function ExpoGL3DView({
                 ctx.roundRect(20, 10, 472, 80, 15);
                 ctx.fill();
                 ctx.stroke();
-                
+
                 // Draw bubble tail
                 ctx.beginPath();
                 ctx.moveTo(100, 90);
@@ -3529,14 +3441,14 @@ export default function ExpoGL3DView({
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
-                
+
                 // Draw text
                 ctx.fillStyle = '#333';
                 ctx.font = 'bold 24px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(emoji + ' ' + message, 256, 50);
-                
+
                 const bubbleTexture = new THREE.CanvasTexture(canvas);
                 const bubbleMaterial = new THREE.SpriteMaterial({
                   map: bubbleTexture,
@@ -3544,7 +3456,7 @@ export default function ExpoGL3DView({
                   depthWrite: false,
                   depthTest: false, // Render on top of everything
                 });
-                
+
                 const bubble = new THREE.Sprite(bubbleMaterial);
                 bubble.position.set(
                   robot.position.x + 3.0, // To the right of robot
@@ -3555,7 +3467,7 @@ export default function ExpoGL3DView({
                 bubble.userData.isSpeechBubble = true;
                 bubble.renderOrder = 100; // Highest render order to appear on top
                 scene.add(bubble);
-                
+
                 // Remove bubble after 5 seconds (longer display time)
                 setTimeout(() => {
                   scene.remove(bubble);
@@ -3563,26 +3475,26 @@ export default function ExpoGL3DView({
                   if (bubble.material.map) bubble.material.map.dispose();
                 }, 5000);
               };
-              
+
               if (success) {
                 // Success dance animation with intricate movements
-                createSpeechBubble("Smooth as a knife through hot butter!", '🔥');
-                
+                createSpeechBubble('Smooth as a knife through hot butter!', '🔥');
+
                 // Create dance pose textures
                 const createDancePose = (poseType: string) => {
                   const canvas = document.createElement('canvas');
                   canvas.width = 128;
                   canvas.height = 256;
                   const ctx = canvas.getContext('2d')!;
-                  
+
                   ctx.clearRect(0, 0, 128, 256);
-                  
+
                   // Female robot colors
                   const skinColor = '#fdbcb4';
                   const outfitColor = '#fff';
                   const skirtColor = '#ff69b4';
                   const hairColor = '#8b4513';
-                  
+
                   // Hair (changes position with dance)
                   ctx.fillStyle = hairColor;
                   if (poseType === 'left') {
@@ -3640,7 +3552,7 @@ export default function ExpoGL3DView({
                     ctx.closePath();
                     ctx.fill();
                   }
-                  
+
                   // Head (same for all poses)
                   ctx.fillStyle = skinColor;
                   ctx.beginPath();
@@ -3649,13 +3561,13 @@ export default function ExpoGL3DView({
                   ctx.strokeStyle = '#f0a0a0';
                   ctx.lineWidth = 1;
                   ctx.stroke();
-                  
+
                   // Hair on top
                   ctx.fillStyle = hairColor;
                   ctx.beginPath();
                   ctx.ellipse(64, 28, 24, 12, 0, Math.PI, Math.PI * 2);
                   ctx.fill();
-                  
+
                   // Pink visor
                   ctx.fillStyle = skirtColor;
                   ctx.beginPath();
@@ -3665,7 +3577,7 @@ export default function ExpoGL3DView({
                   ctx.beginPath();
                   ctx.ellipse(64, 32, 35, 12, 0, Math.PI * 1.1, Math.PI * 2 - 0.1);
                   ctx.fill();
-                  
+
                   // Eyes (happy/excited)
                   ctx.fillStyle = '#000';
                   ctx.beginPath();
@@ -3674,21 +3586,21 @@ export default function ExpoGL3DView({
                   ctx.beginPath();
                   ctx.arc(74, 44, 2, 0, Math.PI * 2);
                   ctx.fill();
-                  
+
                   // Big smile
                   ctx.strokeStyle = '#ff69b4';
                   ctx.lineWidth = 2;
                   ctx.beginPath();
                   ctx.arc(64, 48, 10, 0.1, Math.PI - 0.1);
                   ctx.stroke();
-                  
+
                   // Body/outfit
                   ctx.fillStyle = outfitColor;
                   ctx.fillRect(35, 70, 58, 45);
                   ctx.strokeStyle = '#ddd';
                   ctx.lineWidth = 1;
                   ctx.strokeRect(35, 70, 58, 45);
-                  
+
                   // Pink skirt
                   ctx.fillStyle = skirtColor;
                   ctx.beginPath();
@@ -3699,7 +3611,7 @@ export default function ExpoGL3DView({
                   ctx.closePath();
                   ctx.fill();
                   ctx.stroke();
-                  
+
                   // Different poses
                   if (poseType === 'arms-up') {
                     // Arms raised up in victory
@@ -3710,7 +3622,7 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 0, 16, 45);
                     ctx.strokeRect(-8, 0, 16, 45);
                     ctx.restore();
-                    
+
                     ctx.save();
                     ctx.translate(100, 85);
                     ctx.rotate(Math.PI / 3);
@@ -3718,7 +3630,7 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 0, 16, 45);
                     ctx.strokeRect(-8, 0, 16, 45);
                     ctx.restore();
-                    
+
                     // Putter raised in celebration
                     ctx.save();
                     ctx.translate(105, 50);
@@ -3734,21 +3646,20 @@ export default function ExpoGL3DView({
                     ctx.fillStyle = '#666';
                     ctx.fillRect(-8, 48, 16, 5);
                     ctx.restore();
-                    
+
                     // Legs normal with socks
                     ctx.fillStyle = skinColor;
                     ctx.fillRect(43, 145, 16, 45);
                     ctx.strokeRect(43, 145, 16, 45);
                     ctx.fillRect(69, 145, 16, 45);
                     ctx.strokeRect(69, 145, 16, 45);
-                    
+
                     // Socks
                     ctx.fillStyle = outfitColor;
                     ctx.fillRect(43, 190, 16, 25);
                     ctx.strokeRect(43, 190, 16, 25);
                     ctx.fillRect(69, 190, 16, 25);
                     ctx.strokeRect(69, 190, 16, 25);
-                    
                   } else if (poseType === 'split') {
                     // Arms horizontal
                     ctx.fillStyle = skinColor;
@@ -3756,7 +3667,7 @@ export default function ExpoGL3DView({
                     ctx.strokeRect(5, 95, 23, 14);
                     ctx.fillRect(100, 95, 23, 14);
                     ctx.strokeRect(100, 95, 23, 14);
-                    
+
                     // White gloves at ends
                     ctx.fillStyle = outfitColor;
                     ctx.beginPath();
@@ -3765,7 +3676,7 @@ export default function ExpoGL3DView({
                     ctx.beginPath();
                     ctx.arc(125, 102, 6, 0, Math.PI * 2);
                     ctx.fill();
-                    
+
                     // Legs split with socks
                     ctx.save();
                     ctx.translate(51, 145);
@@ -3777,7 +3688,7 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 35, 16, 25);
                     ctx.strokeRect(-8, 35, 16, 25);
                     ctx.restore();
-                    
+
                     ctx.save();
                     ctx.translate(77, 145);
                     ctx.rotate(Math.PI / 8);
@@ -3788,7 +3699,6 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 35, 16, 25);
                     ctx.strokeRect(-8, 35, 16, 25);
                     ctx.restore();
-                    
                   } else if (poseType === 'disco') {
                     // One arm up, one down
                     ctx.save();
@@ -3798,7 +3708,7 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 0, 16, 50);
                     ctx.strokeRect(-8, 0, 16, 50);
                     ctx.restore();
-                    
+
                     ctx.save();
                     ctx.translate(100, 110);
                     ctx.rotate(Math.PI / 4);
@@ -3806,12 +3716,12 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 0, 16, 40);
                     ctx.strokeRect(-8, 0, 16, 40);
                     ctx.restore();
-                    
+
                     // One leg bent
                     ctx.fillStyle = skinColor;
                     ctx.fillRect(43, 145, 16, 45);
                     ctx.strokeRect(43, 145, 16, 45);
-                    
+
                     ctx.save();
                     ctx.translate(77, 145);
                     ctx.fillRect(-8, 0, 16, 30);
@@ -3821,12 +3731,11 @@ export default function ExpoGL3DView({
                     ctx.fillRect(-8, 0, 16, 25);
                     ctx.strokeRect(-8, 0, 16, 25);
                     ctx.restore();
-                    
+
                     // Socks on straight leg
                     ctx.fillStyle = outfitColor;
                     ctx.fillRect(43, 190, 16, 25);
                     ctx.strokeRect(43, 190, 16, 25);
-                    
                   } else {
                     // Default pose (arms down)
                     ctx.fillStyle = skinColor;
@@ -3834,7 +3743,7 @@ export default function ExpoGL3DView({
                     ctx.strokeRect(15, 80, 16, 50);
                     ctx.fillRect(97, 80, 16, 50);
                     ctx.strokeRect(97, 80, 16, 50);
-                    
+
                     // Gloves
                     ctx.fillStyle = outfitColor;
                     ctx.beginPath();
@@ -3843,13 +3752,13 @@ export default function ExpoGL3DView({
                     ctx.beginPath();
                     ctx.arc(105, 135, 7, 0, Math.PI * 2);
                     ctx.fill();
-                    
+
                     ctx.fillStyle = skinColor;
                     ctx.fillRect(43, 145, 16, 45);
                     ctx.strokeRect(43, 145, 16, 45);
                     ctx.fillRect(69, 145, 16, 45);
                     ctx.strokeRect(69, 145, 16, 45);
-                    
+
                     // Socks
                     ctx.fillStyle = outfitColor;
                     ctx.fillRect(43, 190, 16, 25);
@@ -3857,7 +3766,7 @@ export default function ExpoGL3DView({
                     ctx.fillRect(69, 190, 16, 25);
                     ctx.strokeRect(69, 190, 16, 25);
                   }
-                  
+
                   // Pink golf shoes for all poses
                   ctx.fillStyle = skirtColor;
                   ctx.fillRect(39, 215, 24, 12);
@@ -3867,10 +3776,10 @@ export default function ExpoGL3DView({
                   ctx.fillStyle = outfitColor;
                   ctx.fillRect(42, 218, 18, 3);
                   ctx.fillRect(68, 218, 18, 3);
-                  
+
                   return new THREE.CanvasTexture(canvas);
                 };
-                
+
                 // Create different pose textures
                 const poses = [
                   createDancePose('arms-up'),
@@ -3878,18 +3787,19 @@ export default function ExpoGL3DView({
                   createDancePose('disco'),
                   createDancePose('default'),
                 ];
-                
+
                 // Store original texture
                 const originalTexture = robot.material.map;
                 const originalY = robot.position.y;
-                
+
                 let danceTime = 0;
                 let currentPoseIndex = 0;
                 let lastPoseChange = 0;
-                
+
                 const danceAnimation = () => {
                   danceTime += 0.016; // ~60fps increment
-                  if (danceTime < 5) { // 5 seconds duration
+                  if (danceTime < 5) {
+                    // 5 seconds duration
                     // Change pose every 0.3 seconds
                     if (danceTime - lastPoseChange > 0.3) {
                       currentPoseIndex = (currentPoseIndex + 1) % poses.length;
@@ -3897,13 +3807,13 @@ export default function ExpoGL3DView({
                       robot.material.needsUpdate = true;
                       lastPoseChange = danceTime;
                     }
-                    
+
                     // Bouncing motion
                     robot.position.y = originalY + Math.abs(Math.sin(danceTime * 4)) * 0.2;
-                    
+
                     // Slight side-to-side sway
                     robot.position.x = robot.userData.originalX + Math.sin(danceTime * 3) * 0.3;
-                    
+
                     requestAnimationFrame(danceAnimation);
                   } else {
                     // Reset to original state
@@ -3911,38 +3821,39 @@ export default function ExpoGL3DView({
                     robot.position.x = robot.userData.originalX || robot.position.x;
                     robot.material.map = originalTexture;
                     robot.material.needsUpdate = true;
-                    
+
                     // Dispose of dance textures
                     poses.forEach(pose => pose.dispose());
                   }
                 };
-                
+
                 // Store original X position if not already stored
                 if (!robot.userData.originalX) {
                   robot.userData.originalX = robot.position.x;
                 }
-                
+
                 danceAnimation();
               } else {
                 // Check if missed short (ball didn't reach hole)
                 const distanceToHole = Math.sqrt(
                   Math.pow(currentPos.x - currentHolePos.x, 2) +
-                  Math.pow(currentPos.z - currentHolePos.z, 2)
+                    Math.pow(currentPos.z - currentHolePos.z, 2)
                 );
                 const targetDistance = Math.abs(4 - currentHolePos.z); // Expected distance
                 const actualDistance = Math.abs(4 - currentPos.z);
-                
+
                 if (actualDistance < targetDistance * 0.8) {
                   // Missed short
-                  createSpeechBubble("Better workout kid!", '💪');
-                  
+                  createSpeechBubble('Better workout kid!', '💪');
+
                   // Flexing animation
                   const originalScaleX = robot.scale.x;
                   const originalScaleY = robot.scale.y;
                   let flexTime = 0;
                   const flexAnimation = () => {
                     flexTime += 0.016; // ~60fps increment
-                    if (flexTime < 4) { // Increased duration to 4 seconds
+                    if (flexTime < 4) {
+                      // Increased duration to 4 seconds
                       // Flex muscles (scale up and down) - slower frequency
                       const flex = 1 + Math.sin(flexTime * 1.5) * 0.3; // Much slower flexing
                       robot.scale.x = originalScaleX * flex;
@@ -3957,13 +3868,14 @@ export default function ExpoGL3DView({
                   flexAnimation();
                 } else {
                   // Missed long or wide
-                  createSpeechBubble("So close! Try again!", '😅');
-                  
+                  createSpeechBubble('So close! Try again!', '😅');
+
                   // Head shake animation
                   let shakeTime = 0;
                   const shakeAnimation = () => {
                     shakeTime += 0.016; // ~60fps increment
-                    if (shakeTime < 3) { // Increased duration to 3 seconds
+                    if (shakeTime < 3) {
+                      // Increased duration to 3 seconds
                       robot.material.rotation = Math.sin(shakeTime * 4) * 0.3; // Slower shaking
                       requestAnimationFrame(shakeAnimation);
                     } else {
@@ -3974,9 +3886,9 @@ export default function ExpoGL3DView({
                 }
               }
             };
-            
+
             triggerRobotReaction();
-            
+
             onPuttComplete({
               success,
               accuracy,
@@ -4021,24 +3933,18 @@ export default function ExpoGL3DView({
           //   distanceToHole.toFixed(3)
           // );
 
-          // UNIFIED SUCCESS DETECTION - Use same logic as hole detection
-          const getSuccessThreshold = () => {
-            if (gameMode === 'putt' && puttingData.swingHoleYards) {
-              return 0.25; // Same as hole detection radius for consistency
-            }
-            return 0.12;
-          };
-          
-          const successThreshold = getSuccessThreshold();
-          const success = distanceToHole <= successThreshold && ballRef.current?.visible === false;
-          
+          // UNIFIED SUCCESS DETECTION - Use consistent physics for all modes
+          const success =
+            distanceToHole <= PUTTING_PHYSICS.HOLE_DETECTION_RADIUS &&
+            ballRef.current?.visible === false;
+
           // Only log when ball is near hole or when successful
           if (success || distanceToHole < 1.0) {
             console.log('🎯 Final result:', {
               distance: distanceToHole.toFixed(3),
-              threshold: successThreshold,
+              threshold: PUTTING_PHYSICS.HOLE_DETECTION_RADIUS,
               ballVisible: ballRef.current?.visible,
-              success: success
+              success: success,
             });
           }
           const accuracy = Math.max(0, 100 - (distanceToHole / 2.0) * 100); // More forgiving accuracy calculation
@@ -4054,16 +3960,16 @@ export default function ExpoGL3DView({
             const robot = (window as any).robotAvatar;
             const scene = sceneRef.current;
             if (!robot || !scene) return;
-            
+
             // Create speech bubble (same function as above)
             const createSpeechBubble = (message: string, emoji: string = '🎉') => {
               const canvas = document.createElement('canvas');
               canvas.width = 512;
               canvas.height = 128;
               const ctx = canvas.getContext('2d')!;
-              
+
               ctx.clearRect(0, 0, 512, 128);
-              
+
               ctx.fillStyle = 'white';
               ctx.strokeStyle = '#333';
               ctx.lineWidth = 3;
@@ -4071,7 +3977,7 @@ export default function ExpoGL3DView({
               ctx.roundRect(20, 10, 472, 80, 15);
               ctx.fill();
               ctx.stroke();
-              
+
               ctx.beginPath();
               ctx.moveTo(100, 90);
               ctx.lineTo(80, 110);
@@ -4079,13 +3985,13 @@ export default function ExpoGL3DView({
               ctx.closePath();
               ctx.fill();
               ctx.stroke();
-              
+
               ctx.fillStyle = '#333';
               ctx.font = 'bold 24px Arial';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillText(emoji + ' ' + message, 256, 50);
-              
+
               const bubbleTexture = new THREE.CanvasTexture(canvas);
               const bubbleMaterial = new THREE.SpriteMaterial({
                 map: bubbleTexture,
@@ -4093,7 +3999,7 @@ export default function ExpoGL3DView({
                 depthWrite: false,
                 depthTest: false, // Render on top of everything
               });
-              
+
               const bubble = new THREE.Sprite(bubbleMaterial);
               bubble.position.set(
                 robot.position.x + 3.0, // To the right of robot
@@ -4104,29 +4010,30 @@ export default function ExpoGL3DView({
               bubble.userData.isSpeechBubble = true;
               bubble.renderOrder = 100; // Highest render order to appear on top
               scene.add(bubble);
-              
+
               setTimeout(() => {
                 scene.remove(bubble);
                 if (bubble.material) bubble.material.dispose();
                 if (bubble.material.map) bubble.material.map.dispose();
               }, 5000); // Longer display time
             };
-            
+
             // Check if missed short
             const targetDistance = Math.abs(4 - currentHolePos.z);
             const actualDistance = Math.abs(4 - finalPos.z);
-            
+
             if (actualDistance < targetDistance * 0.8) {
               // Missed short
-              createSpeechBubble("Better workout kid!", '💪');
-              
+              createSpeechBubble('Better workout kid!', '💪');
+
               // Flexing animation - SLOWER
               const originalScaleX = robot.scale.x;
               const originalScaleY = robot.scale.y;
               let flexTime = 0;
               const flexAnimation = () => {
                 flexTime += 0.016; // ~60fps
-                if (flexTime < 4) { // 4 seconds duration
+                if (flexTime < 4) {
+                  // 4 seconds duration
                   const flex = 1 + Math.sin(flexTime * 1.5) * 0.3; // Slower flex
                   robot.scale.x = originalScaleX * flex;
                   robot.scale.y = originalScaleY * (2 - flex);
@@ -4139,13 +4046,14 @@ export default function ExpoGL3DView({
               flexAnimation();
             } else {
               // Missed long or wide
-              createSpeechBubble("So close! Try again!", '😅');
-              
+              createSpeechBubble('So close! Try again!', '😅');
+
               // Head shake animation - SLOWER
               let shakeTime = 0;
               const shakeAnimation = () => {
                 shakeTime += 0.016; // ~60fps
-                if (shakeTime < 3) { // 3 seconds duration
+                if (shakeTime < 3) {
+                  // 3 seconds duration
                   robot.material.rotation = Math.sin(shakeTime * 4) * 0.3; // Slower shake
                   requestAnimationFrame(shakeAnimation);
                 } else {
@@ -4155,7 +4063,7 @@ export default function ExpoGL3DView({
               shakeAnimation();
             }
           };
-          
+
           triggerRobotReactionMiss();
 
           onPuttComplete({
@@ -4296,7 +4204,7 @@ export default function ExpoGL3DView({
       // Only intercept wheel events if they're over the 3D canvas area
       const target = event.target as HTMLElement;
       const canvas = target.closest('canvas') || target.querySelector('canvas');
-      
+
       if (canvas) {
         setAutoRotate(false);
         const zoomSensitivity = 0.001;
@@ -4314,7 +4222,7 @@ export default function ExpoGL3DView({
       const element = document.body;
       element.addEventListener('mousemove', handleMouseMove);
       element.addEventListener('mouseup', handleMouseUp);
-      
+
       // Add wheel listener with passive: false to allow preventDefault
       element.addEventListener('wheel', handleWheel, { passive: false });
 

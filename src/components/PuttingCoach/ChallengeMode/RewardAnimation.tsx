@@ -6,10 +6,7 @@ interface RewardAnimationProps {
   lastReward: number;
 }
 
-export default function RewardAnimation({
-  showRewardAnimation,
-  lastReward,
-}: RewardAnimationProps) {
+export default function RewardAnimation({ showRewardAnimation, lastReward }: RewardAnimationProps) {
   if (!showRewardAnimation) return null;
 
   return (
