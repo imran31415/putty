@@ -244,6 +244,17 @@ export default function ExpoGL3DView({
     currentLevel,
   ]); // Removed createHoleAndFlag to prevent infinite loop
 
+  // Update player avatar when club or game mode changes
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    
+    const createAvatar = (window as any).createPlayerAvatar;
+    if (createAvatar) {
+      const currentClub = gameMode === 'swing' && swingData ? swingData.club : 'putter';
+      createAvatar(currentClub);
+    }
+  }, [gameMode, swingData?.club]);
+
   // Handle game mode changes - just update green size
   useEffect(() => {
     if (!sceneRef.current) return;
@@ -1105,6 +1116,462 @@ export default function ExpoGL3DView({
     ball.castShadow = true;
     scene.add(ball);
     ballRef.current = ball;
+
+    // Create player avatar with articulated animation
+    const createPlayerAvatar = (clubType?: string) => {
+      // Remove existing avatar if any
+      const existingAvatar = scene.children.find(child => child.userData && child.userData.isPlayerAvatar);
+      if (existingAvatar) {
+        scene.remove(existingAvatar);
+      }
+      const existingShadow = scene.children.find(child => child.userData && child.userData.isPlayerAvatarShadow);
+      if (existingShadow) {
+        scene.remove(existingShadow);
+      }
+      
+      // Store animation state for the avatar
+      const avatarState = {
+        frame: 0,
+        animating: false,
+        animationType: 'idle',
+        clubType: clubType || 'putter'
+      };
+      
+      // Create avatar texture with animation frame
+      const createAvatarTexture = (animFrame: number = 0, animType: string = 'idle') => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        
+        // Clear background
+        ctx.clearRect(0, 0, 256, 256);
+        
+        // Golfer colors
+        const skinColor = '#fdbcb4'; // Light skin
+        const shirtColor = '#4a90e2'; // Blue polo
+        const pantsColor = '#2c3e50'; // Dark pants
+        const shoeColor = '#333333'; // Black shoes
+        const clubColor = '#444444'; // Club shaft
+        
+        // Calculate animation positions based on frame and type
+        let bodyRotation = 0;
+        let armRotation = Math.PI / 3; // Default arm angle
+        let clubRotation = 0;
+        let hipRotation = 0;
+        let shoulderRotation = 0;
+        let legBend = 0;
+        
+        // Animation calculations (adjusted for back view)
+        if (animType === 'swing') {
+          const progress = animFrame / 20; // 20 frames for full swing
+          
+          if (progress < 0.3) {
+            // Backswing (club goes to the right from back view)
+            const backswingProg = progress / 0.3;
+            bodyRotation = backswingProg * Math.PI / 6; // Rotate body right
+            armRotation = Math.PI / 3 - backswingProg * Math.PI / 2; // Arms go up and back
+            clubRotation = -backswingProg * Math.PI * 0.8; // Club goes way back
+            hipRotation = backswingProg * Math.PI / 8;
+            shoulderRotation = backswingProg * Math.PI / 4;
+          } else if (progress < 0.4) {
+            // Top of backswing (pause)
+            bodyRotation = Math.PI / 6;
+            armRotation = -Math.PI / 6;
+            clubRotation = -Math.PI * 0.8;
+            hipRotation = Math.PI / 8;
+            shoulderRotation = Math.PI / 4;
+          } else if (progress < 0.6) {
+            // Downswing (club swings to the left from back view)
+            const downswingProg = (progress - 0.4) / 0.2;
+            bodyRotation = Math.PI / 6 - downswingProg * Math.PI / 3;
+            armRotation = -Math.PI / 6 + downswingProg * Math.PI / 2;
+            clubRotation = -Math.PI * 0.8 + downswingProg * Math.PI * 1.3;
+            hipRotation = Math.PI / 8 - downswingProg * Math.PI / 4;
+            shoulderRotation = Math.PI / 4 - downswingProg * Math.PI / 2;
+            legBend = downswingProg * 0.1;
+          } else if (progress < 0.7) {
+            // Impact
+            bodyRotation = -Math.PI / 8;
+            armRotation = Math.PI / 3;
+            clubRotation = Math.PI * 0.5;
+            hipRotation = -Math.PI / 8;
+            shoulderRotation = -Math.PI / 4;
+            legBend = 0.1;
+          } else {
+            // Follow through (club continues to the left)
+            const followProg = (progress - 0.7) / 0.3;
+            bodyRotation = -Math.PI / 8 - followProg * Math.PI / 6;
+            armRotation = Math.PI / 3 + followProg * Math.PI / 4;
+            clubRotation = Math.PI * 0.5 + followProg * Math.PI * 0.4;
+            hipRotation = -Math.PI / 8 - followProg * Math.PI / 8;
+            shoulderRotation = -Math.PI / 4;
+            legBend = 0.1 - followProg * 0.1;
+          }
+        } else if (animType === 'putt') {
+          const progress = animFrame / 15; // 15 frames for putting stroke
+          
+          if (progress < 0.4) {
+            // Backstroke
+            const backstrokeProg = progress / 0.4;
+            armRotation = Math.PI / 3 - backstrokeProg * Math.PI / 6;
+            clubRotation = -backstrokeProg * Math.PI / 8;
+            shoulderRotation = -backstrokeProg * Math.PI / 12;
+          } else {
+            // Forward stroke
+            const forwardProg = (progress - 0.4) / 0.6;
+            armRotation = Math.PI / 3 - Math.PI / 6 + forwardProg * Math.PI / 4;
+            clubRotation = -Math.PI / 8 + forwardProg * Math.PI / 4;
+            shoulderRotation = -Math.PI / 12 + forwardProg * Math.PI / 8;
+          }
+        }
+        
+        // Draw golfer from side view (facing right/east toward hole)
+        ctx.save();
+        ctx.translate(128, 40); // Center and move up
+        
+        // Rotate entire body for swing
+        ctx.rotate(bodyRotation);
+        
+        // Legs with realistic shape (side view)
+        // Back leg
+        ctx.save();
+        ctx.translate(-8, 135);
+        ctx.rotate(legBend);
+        
+        // Thigh
+        ctx.fillStyle = pantsColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 15, 8, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Calf
+        ctx.beginPath();
+        ctx.ellipse(0, 40, 6, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Shoe
+        ctx.fillStyle = shoeColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 58, 9, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Front leg
+        ctx.save();
+        ctx.translate(8, 135);
+        ctx.rotate(-legBend * 0.5);
+        
+        // Thigh
+        ctx.fillStyle = pantsColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 15, 8, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Calf
+        ctx.beginPath();
+        ctx.ellipse(0, 40, 6, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Shoe
+        ctx.fillStyle = shoeColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 58, 9, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Hips and torso
+        ctx.save();
+        ctx.translate(0, 100);
+        ctx.rotate(hipRotation);
+        
+        // Torso with realistic shape
+        ctx.save();
+        ctx.rotate(shoulderRotation);
+        
+        // Main body shape
+        ctx.fillStyle = shirtColor;
+        ctx.beginPath();
+        // Shoulders to waist taper
+        ctx.moveTo(-22, -35);
+        ctx.bezierCurveTo(-24, -20, -20, 0, -15, 15);
+        ctx.lineTo(15, 15);
+        ctx.bezierCurveTo(20, 0, 24, -20, 22, -35);
+        ctx.bezierCurveTo(15, -38, -15, -38, -22, -35);
+        ctx.fill();
+        
+        // Add some shading for depth
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        ctx.beginPath();
+        ctx.moveTo(0, -35);
+        ctx.bezierCurveTo(5, -20, 5, 0, 3, 15);
+        ctx.lineTo(-3, 15);
+        ctx.bezierCurveTo(-5, 0, -5, -20, 0, -35);
+        ctx.fill();
+        
+        // Collar
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-15, -35);
+        ctx.bezierCurveTo(-10, -37, 10, -37, 15, -35);
+        ctx.stroke();
+        
+        // Head from side view (facing right)
+        ctx.save();
+        ctx.rotate(-shoulderRotation * 0.3);
+        
+        // Neck (side view)
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.ellipse(2, -40, 8, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Head (side profile facing right)
+        ctx.beginPath();
+        ctx.ellipse(4, -52, 14, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Nose profile
+        ctx.beginPath();
+        ctx.moveTo(16, -52);
+        ctx.lineTo(18, -50);
+        ctx.lineTo(16, -48);
+        ctx.fill();
+        
+        // Ear (visible from side)
+        ctx.beginPath();
+        ctx.ellipse(-4, -52, 3, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Hair/Cap from side
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        // Cap profile
+        ctx.ellipse(4, -60, 16, 14, 0, -Math.PI * 0.1, Math.PI * 1.1);
+        ctx.fill();
+        
+        // Cap bill
+        ctx.fillStyle = '#cc0000';
+        ctx.beginPath();
+        ctx.ellipse(18, -58, 8, 3, -0.2, 0, Math.PI);
+        ctx.fill();
+        
+        // Small hair visible under cap
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath();
+        ctx.moveTo(-10, -48);
+        ctx.lineTo(10, -48);
+        ctx.lineTo(8, -46);
+        ctx.lineTo(-8, -46);
+        ctx.fill();
+        
+        ctx.restore();
+        
+        // Arms in golf stance (extended toward ball)
+        // Back arm (left when facing right)
+        ctx.save();
+        ctx.translate(-8, -15); // Start from back shoulder
+        
+        // Rotate arm forward toward ball
+        ctx.rotate(Math.PI / 3 + armRotation);
+        
+        // Upper arm
+        ctx.fillStyle = shirtColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 10, 5, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Elbow
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.arc(0, 22, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Forearm extending down to club
+        ctx.beginPath();
+        ctx.ellipse(0, 35, 4, 13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Hand gripping club
+        ctx.beginPath();
+        ctx.arc(0, 48, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Front arm (right when facing right)
+        ctx.save();
+        ctx.translate(8, -15); // Start from front shoulder
+        
+        // Rotate arm forward toward ball
+        ctx.rotate(Math.PI / 3 + armRotation * 0.8);
+        
+        // Upper arm
+        ctx.fillStyle = shirtColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 10, 5, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Elbow
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.arc(0, 22, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Forearm extending down to club
+        ctx.beginPath();
+        ctx.ellipse(0, 35, 4, 13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Hand gripping club (overlapping grip)
+        ctx.beginPath();
+        ctx.arc(0, 48, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        ctx.restore(); // End shoulders
+        ctx.restore(); // End hips
+        
+        // Draw club (extending from hands toward ball)
+        const isPutter = !avatarState.clubType || avatarState.clubType === 'putter';
+        const isWood = avatarState.clubType && (avatarState.clubType.includes('wood') || avatarState.clubType === 'driver');
+        
+        ctx.save();
+        ctx.translate(128, 40); // Match body position
+        ctx.rotate(bodyRotation); // Follow body rotation
+        ctx.translate(0, 100); // To torso level
+        ctx.rotate(hipRotation);
+        ctx.rotate(shoulderRotation);
+        
+        // Position club at hands extending toward ball (to the right)
+        ctx.translate(12, 15); // Forward from body to hand position
+        ctx.rotate(Math.PI / 3 + armRotation * 0.5); // Angle down toward ball
+        ctx.rotate(clubRotation); // Additional club rotation for swing
+        
+        // Club shaft (pointing down and forward)
+        ctx.strokeStyle = clubColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, 85); // Club length
+        ctx.stroke();
+        
+        // Club grip at top
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(-3, 0, 6, 25);
+        
+        // Add grip texture
+        ctx.strokeStyle = '#6B4423';
+        ctx.lineWidth = 0.5;
+        for(let i = 5; i < 20; i += 3) {
+          ctx.beginPath();
+          ctx.moveTo(-3, i);
+          ctx.lineTo(3, i);
+          ctx.stroke();
+        }
+        
+        // Club head at bottom
+        ctx.translate(0, 85); // To club head position
+        if (isPutter) {
+          ctx.fillStyle = '#888888';
+          ctx.fillRect(-10, -2, 20, 6);
+          // Putter face
+          ctx.strokeStyle = '#666666';
+          ctx.lineWidth = 0.5;
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(-8 + i * 6, 0);
+            ctx.lineTo(-8 + i * 6, 4);
+            ctx.stroke();
+          }
+        } else if (isWood) {
+          ctx.fillStyle = '#2a2a2a';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Iron/Wedge
+          ctx.fillStyle = '#999999';
+          ctx.fillRect(-8, -2, 16, 6);
+          // Club face grooves
+          ctx.strokeStyle = '#777777';
+          ctx.lineWidth = 0.5;
+          for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(-6 + i * 4, 0);
+            ctx.lineTo(-6 + i * 4, 3);
+            ctx.stroke();
+          }
+        }
+        
+        ctx.restore();
+        ctx.restore(); // Back to origin
+        
+        return new THREE.CanvasTexture(canvas);
+      };
+      
+      const avatarTexture = createAvatarTexture();
+      avatarTexture.minFilter = THREE.LinearFilter;
+      avatarTexture.magFilter = THREE.LinearFilter;
+      
+      const avatarMaterial = new THREE.SpriteMaterial({
+        map: avatarTexture,
+        transparent: true,
+      });
+      
+      const playerAvatar = new THREE.Sprite(avatarMaterial);
+      
+      // Position avatar to the side of the ball (already facing east in texture)
+      playerAvatar.position.set(
+        -0.8,  // To the left of ball
+        1.0,   // Height
+        4.2    // Slightly behind ball for better view
+      );
+      
+      playerAvatar.scale.set(2, 2, 1);
+      playerAvatar.userData.isPlayerAvatar = true;
+      playerAvatar.userData.avatarState = avatarState;
+      playerAvatar.renderOrder = 10;
+      scene.add(playerAvatar);
+      
+      // Add shadow
+      const avatarShadow = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.2, 0.3),
+        new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.3,
+          side: THREE.DoubleSide,
+        })
+      );
+      avatarShadow.rotation.x = -Math.PI / 2;
+      avatarShadow.position.set(-0.8, 0.01, 4.2); // Match avatar position
+      avatarShadow.userData.isPlayerAvatarShadow = true;
+      scene.add(avatarShadow);
+      
+      // Animation update function
+      const updateAvatarAnimation = (frame: number, type: string) => {
+        avatarState.frame = frame;
+        avatarState.animationType = type;
+        const newTexture = createAvatarTexture(frame, type);
+        newTexture.minFilter = THREE.LinearFilter;
+        newTexture.magFilter = THREE.LinearFilter;
+        avatarMaterial.map = newTexture;
+        avatarMaterial.needsUpdate = true;
+      };
+      
+      // Store references and functions
+      (window as any).playerAvatar = playerAvatar;
+      (window as any).playerAvatarShadow = avatarShadow;
+      (window as any).updateAvatarAnimation = updateAvatarAnimation;
+    };
+    
+    // Create initial avatar with putter
+    const initialClub = gameMode === 'swing' && swingData ? swingData.club : 'putter';
+    createPlayerAvatar(initialClub);
+    
+    // Store the create function for updates
+    (window as any).createPlayerAvatar = createPlayerAvatar;
 
     // CENTRALIZED SCALING FUNCTION - Used by ALL distance calculations
     const getWorldUnitsPerFoot = (holeDistanceFeet: number) => {
@@ -2181,7 +2648,17 @@ export default function ExpoGL3DView({
       createCoolerAndFratRobot();
       
       // Create third robot over the actual playing ball (facing toward ball)
-      const createPlayerRobot = () => {
+      const createPlayerRobot = (clubType?: string) => {
+        // Remove existing player robot if any
+        const existingRobot = scene.children.find(child => child.userData && child.userData.isPlayerRobot);
+        if (existingRobot) {
+          scene.remove(existingRobot);
+        }
+        const existingShadow = scene.children.find(child => child.userData && child.userData.isPlayerRobotShadow);
+        if (existingShadow) {
+          scene.remove(existingShadow);
+        }
+        
         // Create robot in side view facing right toward the ball
         const createPlayerRobotTexture = () => {
           const canvas = document.createElement('canvas');
@@ -2309,35 +2786,85 @@ export default function ExpoGL3DView({
           ctx.fill();
           ctx.stroke();
           
-          // Putter (angled toward ball)
+          // Draw appropriate club based on type
+          const isPutter = !clubType || clubType === 'putter';
+          const isWedge = clubType && (clubType.includes('wedge') || clubType.includes('chip'));
+          const isIron = clubType && (clubType.includes('iron') || isWedge);
+          const isWood = clubType && (clubType.includes('wood') || clubType === 'driver');
+          
+          // Club shaft (all clubs)
           ctx.strokeStyle = '#444';
-          ctx.lineWidth = 5;
+          ctx.lineWidth = isWood ? 6 : 5;
           ctx.beginPath();
           ctx.moveTo(25, 120);
-          ctx.lineTo(25, 205); // Long shaft
+          if (isPutter) {
+            ctx.lineTo(25, 205); // Straight shaft for putter
+          } else {
+            // Angled shaft for other clubs (ready to swing)
+            ctx.lineTo(35, 195); 
+          }
           ctx.stroke();
           
-          // Putter grip
+          // Club grip (all clubs)
           ctx.fillStyle = '#8B4513';
-          ctx.fillRect(22, 120, 6, 25);
+          ctx.fillRect(22, 120, 8, 30);
           ctx.strokeStyle = '#333';
           ctx.lineWidth = 1;
-          ctx.strokeRect(22, 120, 6, 25);
+          ctx.strokeRect(22, 120, 8, 30);
           
-          // Putter head (positioned close to ball)
-          ctx.fillStyle = '#666';
-          ctx.fillRect(10, 201, 30, 10);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(10, 201, 30, 10);
-          // Add putter face lines
-          ctx.strokeStyle = '#999';
-          ctx.lineWidth = 1;
-          for (let i = 0; i < 4; i++) {
+          // Club head varies by type
+          if (isPutter) {
+            // Putter head (blade style)
+            ctx.fillStyle = '#666';
+            ctx.fillRect(10, 201, 30, 10);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 201, 30, 10);
+            // Add putter face lines
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 4; i++) {
+              ctx.beginPath();
+              ctx.moveTo(12 + i * 7, 203);
+              ctx.lineTo(12 + i * 7, 209);
+              ctx.stroke();
+            }
+          } else if (isWood) {
+            // Wood/Driver head (larger, rounded)
+            ctx.fillStyle = '#2a2a2a';
             ctx.beginPath();
-            ctx.moveTo(12 + i * 7, 203);
-            ctx.lineTo(12 + i * 7, 209);
+            ctx.ellipse(40, 195, 15, 12, Math.PI / 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2;
             ctx.stroke();
+            // Add wood face lines
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(30, 190);
+            ctx.lineTo(45, 200);
+            ctx.stroke();
+          } else {
+            // Iron/Wedge head (angled blade)
+            ctx.save();
+            ctx.translate(35, 195);
+            ctx.rotate(Math.PI / 6); // Loft angle
+            ctx.fillStyle = '#888';
+            ctx.fillRect(-5, -2, 20, 8);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-5, -2, 20, 8);
+            // Add grooves
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i < 5; i++) {
+              ctx.beginPath();
+              ctx.moveTo(-3, -1 + i * 1.5);
+              ctx.lineTo(13, -1 + i * 1.5);
+              ctx.stroke();
+            }
+            ctx.restore();
           }
           
           // Add concentration lines near head
@@ -2396,7 +2923,7 @@ export default function ExpoGL3DView({
           0.005,
           4.2
         );
-        playerRobotShadow.userData.isPlayerRobot = true;
+        playerRobotShadow.userData.isPlayerRobotShadow = true;
         scene.add(playerRobotShadow);
         
         // Store references
@@ -2404,11 +2931,12 @@ export default function ExpoGL3DView({
         (window as any).playerRobotShadow = playerRobotShadow;
       };
       
-      // Only create player robot at initial hole creation (not on updates)
-      // since it should stay at the ball position
-      if (!scene.children.some(child => child.userData && child.userData.isPlayerRobot)) {
-        createPlayerRobot();
-      }
+      // Create or update player robot with appropriate club
+      const currentClub = gameMode === 'swing' && swingData ? swingData.club : 'putter';
+      createPlayerRobot(currentClub);
+      
+      // Store the create function for updates
+      (window as any).createPlayerRobot = createPlayerRobot;
 
       // console.log(`🕳️ Hole positioned at ${holeDistanceFeet}ft (Z: ${holePos.z})`);
       return holePos;
@@ -2955,30 +3483,27 @@ export default function ExpoGL3DView({
     const trailLine = new THREE.Line(trailGeometry, trailMaterial);
     scene.add(trailLine);
 
-    // Animate player robot swing
-    const playerRobot = (window as any).playerRobot;
-    if (playerRobot) {
-      // Quick swing animation
-      const originalRotation = playerRobot.rotation.z;
-      let swingTime = 0;
-      const swingDuration = 0.4;
-
-      const animateSwing = () => {
-        swingTime += 0.016;
-        if (swingTime < swingDuration) {
-          const progress = swingTime / swingDuration;
-          // Backswing then follow through
-          if (progress < 0.3) {
-            playerRobot.rotation.z = originalRotation - (progress / 0.3) * 0.5;
-          } else {
-            playerRobot.rotation.z = originalRotation - 0.5 + ((progress - 0.3) / 0.7) * 1.0;
-          }
-          requestAnimationFrame(animateSwing);
+    // Animate player avatar swing with articulated motion
+    const updateAnimation = (window as any).updateAvatarAnimation;
+    if (updateAnimation) {
+      let frameIndex = 0;
+      const totalFrames = 21; // More frames for smoother animation
+      const frameRate = 30; // ms per frame
+      
+      const animateSwingFrame = () => {
+        if (frameIndex < totalFrames) {
+          updateAnimation(frameIndex, 'swing');
+          frameIndex++;
+          setTimeout(animateSwingFrame, frameRate);
         } else {
-          playerRobot.rotation.z = originalRotation;
+          // Return to idle after a moment
+          setTimeout(() => {
+            updateAnimation(0, 'idle');
+          }, 500);
         }
       };
-      animateSwing();
+      
+      animateSwingFrame();
     }
 
     // Animate ball along trajectory
@@ -3071,51 +3596,27 @@ export default function ExpoGL3DView({
         return;
       }
 
-      // Animate player robot putting stroke
-      const playerRobot = (window as any).playerRobot;
-      if (playerRobot) {
-        // Store original position
-        const originalX = playerRobot.position.x;
-
-        // Backstroke animation (move left away from ball)
-        let strokeTime = 0;
-        const strokeDuration = 0.5; // Half second for backstroke
-        const backstrokeDistance = -0.2; // Move left 0.2 units
-
-        const animateStroke = () => {
-          strokeTime += 0.016; // 60fps
-
-          if (strokeTime < strokeDuration) {
-            // Move robot left during backstroke
-            const progress = strokeTime / strokeDuration;
-            const easeProgress = Math.sin((progress * Math.PI) / 2); // Ease out
-            playerRobot.position.x = originalX + backstrokeDistance * easeProgress;
-            requestAnimationFrame(animateStroke);
+      // Animate player avatar putting stroke with articulated motion
+      const updateAnimation = (window as any).updateAvatarAnimation;
+      if (updateAnimation) {
+        let frameIndex = 0;
+        const totalFrames = 16; // Frames for putting animation
+        const frameRate = 40; // ms per frame (slower for putting)
+        
+        const animatePuttingFrame = () => {
+          if (frameIndex < totalFrames) {
+            updateAnimation(frameIndex, 'putt');
+            frameIndex++;
+            setTimeout(animatePuttingFrame, frameRate);
           } else {
-            // Forward stroke (move right toward ball)
-            let forwardTime = 0;
-            const forwardDuration = 0.3; // Faster forward stroke
-
-            const animateForward = () => {
-              forwardTime += 0.016;
-
-              if (forwardTime < forwardDuration) {
-                const progress = forwardTime / forwardDuration;
-                const easeProgress = 1 - Math.cos((progress * Math.PI) / 2); // Ease in
-                playerRobot.position.x =
-                  originalX + backstrokeDistance - backstrokeDistance * easeProgress * 1.5; // Overshoot slightly toward ball
-                requestAnimationFrame(animateForward);
-              } else {
-                // Return to original position
-                playerRobot.position.x = originalX;
-              }
-            };
-
-            animateForward();
+            // Hold finish briefly then return to idle
+            setTimeout(() => {
+              updateAnimation(0, 'idle');
+            }, 300);
           }
         };
-
-        animateStroke();
+        
+        animatePuttingFrame();
       }
 
       // Calculate trajectory
@@ -3336,67 +3837,32 @@ export default function ExpoGL3DView({
               ? trajectory[currentStep].distanceTo(trajectory[currentStep - 1]) / 0.05
               : 0;
 
-          // Check for near miss rim-out (only if ball is close but not going in)
-          if (distanceToHole > 0.15 && distanceToHole <= 0.25 && currentSpeed > 0.4) {
-            // Ball rims out - it was close but too fast or off-center
-            const rimOutDirection = new THREE.Vector3(
-              currentPos.x - currentHolePos.x,
-              0,
-              currentPos.z - currentHolePos.z
-            ).normalize();
-
-            // Add rim-out animation (ball deflects away from hole)
-            for (let i = 1; i <= 6; i++) {
-              const rimPos = currentPos.clone();
-              const decay = Math.exp(-i * 0.2);
-              rimPos.x += rimOutDirection.x * i * 0.02 * decay;
-              rimPos.z += rimOutDirection.z * i * 0.02 * decay;
-              trajectory.push(rimPos);
-            }
-
-            // Continue animation to show rim-out
-            currentStep++;
-            requestAnimationFrame(animateBall);
-            return;
-          }
+          // No rim-out animation - ball either goes in or misses cleanly
 
           // UNIFIED HOLE DETECTION SYSTEM - v9
           // Use consistent realistic physics for all modes
           const holeDetectionRadius = PUTTING_PHYSICS.HOLE_DETECTION_RADIUS;
           const isGoingIn = distanceToHole <= holeDetectionRadius;
 
-          // Only log when ball is near hole to reduce spam
-          if (distanceToHole < 1.0) {
-            console.log('⛳ Hole detection:', {
-              distance: distanceToHole.toFixed(3),
-              threshold: holeDetectionRadius,
-              willGoIn: isGoingIn,
-              mode: gameMode,
-              swingChallenge: !!puttingData.swingHoleYards,
-            });
-          }
-
           if (isGoingIn) {
-            // Ball goes in hole - animate it dropping into the hole
-            // Create a simple drop animation
-            const dropSteps = 10;
+            // Ball goes in hole - quick and clean drop
+            const dropSteps = 5; // Fewer steps for cleaner animation
             for (let i = 1; i <= dropSteps; i++) {
               const dropPos = currentPos.clone();
-              // Move ball towards hole center
+              // Quick drop straight down
               const t = i / dropSteps;
               dropPos.x = currentPos.x * (1 - t) + currentHolePos.x * t;
               dropPos.z = currentPos.z * (1 - t) + currentHolePos.z * t;
-              // Drop the ball down into the hole
-              dropPos.y = Math.max(0, currentPos.y - i * 0.015);
+              dropPos.y = currentPos.y * (1 - t * t); // Accelerated drop
               trajectory.push(dropPos);
             }
 
-            // After drop animation, make ball disappear
+            // Make ball disappear quickly
             setTimeout(() => {
               if (ballRef.current) {
                 ballRef.current.visible = false;
               }
-            }, dropSteps * 50); // Match animation timing
+            }, 200); // Quick disappearance
 
             // Complete animation immediately
             setIsAnimating(false);
