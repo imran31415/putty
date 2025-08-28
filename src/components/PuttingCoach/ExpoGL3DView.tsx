@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,6 +26,7 @@ interface PuttingData {
   greenSpeed: number;
   slopeUpDown: number; // Positive = uphill (slower), Negative = downhill (faster)
   slopeLeftRight: number; // Positive = right slope (curves right), Negative = left slope (curves left)
+  swingHoleYards?: number | null; // Optional: for swing challenges
 }
 
 interface ExpoGL3DViewProps {
@@ -51,6 +52,7 @@ export default function ExpoGL3DView({
   currentLevel = null,
   challengeAttempts = 0,
 }: ExpoGL3DViewProps) {
+  // v7 - Fixed infinite loop
   const rendererRef = useRef<Renderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -92,6 +94,162 @@ export default function ExpoGL3DView({
   const [lastSlopeLeftRight, setLastSlopeLeftRight] = useState(0);
   const [lastHoleDistance, setLastHoleDistance] = useState(8);
 
+  // COMPREHENSIVE HOLE/FLAG SYSTEM - v5 COMPLETE REFACTOR
+  // This function manages ALL hole and flag creation for ALL modes
+  const createHoleAndFlag = useCallback((scene: THREE.Scene, distanceFeet: number, mode: string) => {
+    // Creating hole/flag
+    
+    // Calculate position using centralized scaling
+    const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+    let worldUnitsPerFoot: number;
+    if (getWorldUnitsPerFoot) {
+      worldUnitsPerFoot = getWorldUnitsPerFoot(distanceFeet);
+    } else {
+      // Fallback scaling
+      if (distanceFeet <= 10) worldUnitsPerFoot = 1.0;
+      else if (distanceFeet <= 25) worldUnitsPerFoot = 0.8;
+      else if (distanceFeet <= 50) worldUnitsPerFoot = 0.6;
+      else if (distanceFeet <= 100) worldUnitsPerFoot = 0.4;
+      else worldUnitsPerFoot = 0.25;
+    }
+    
+    const holeZ = 4 - (distanceFeet * worldUnitsPerFoot);
+    
+    // Remove ALL existing holes, flags, and flagsticks
+    const toRemove = scene.children.filter(child => 
+      child.userData?.isFlag || 
+      child.userData?.isFlagstick ||
+      child.userData?.isHole
+    );
+    toRemove.forEach(child => {
+      scene.remove(child);
+      if ('geometry' in child) (child as any).geometry?.dispose();
+      if ('material' in child) {
+        const mat = (child as any).material;
+        if (mat) {
+          if (Array.isArray(mat)) {
+            mat.forEach((m: any) => m?.dispose());
+          } else {
+            mat.dispose();
+          }
+        }
+      }
+    });
+    
+    // ALWAYS create hole (black circle with white ring)
+    const holeRadius = 0.15;
+    
+    // Black hole
+    const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
+    const holeMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x000000,
+      side: THREE.DoubleSide,
+      depthWrite: true
+    });
+    const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+    hole.rotation.x = -Math.PI / 2;
+    hole.position.set(0, 0.02, holeZ);
+    hole.userData.isHole = true;
+    hole.renderOrder = 1;
+    scene.add(hole);
+    
+    // White ring for visibility
+    const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      depthWrite: true
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(0, 0.021, holeZ);
+    ring.userData.isHole = true;
+    ring.renderOrder = 2;
+    scene.add(ring);
+    
+    // ALWAYS create flagstick and flag
+    const flagstickHeight = mode === 'swing' && distanceFeet > 100 ? 6 : 3.5;
+    const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
+    const flagstickMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x333333,
+      metalness: 0.3,
+      roughness: 0.7
+    });
+    const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
+    flagstick.position.set(0, flagstickHeight / 2, holeZ);
+    flagstick.userData.isFlagstick = true;
+    flagstick.castShadow = true;
+    scene.add(flagstick);
+    
+    // Create flag - scale based on distance for visibility
+    const flagScale = mode === 'swing' && distanceFeet > 100 ? 2.0 : 1.0;
+    const flagWidth = 1.2 * flagScale;
+    const flagHeight = 0.8 * flagScale;
+    const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
+    const flagMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xff0000,
+      side: THREE.DoubleSide,
+      emissive: 0xff0000,
+      emissiveIntensity: 0.15
+    });
+    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+    flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
+    flag.userData.isFlag = true;
+    scene.add(flag);
+    
+    // Store hole position globally
+    (window as any).currentHolePosition = { x: 0, y: 0.01, z: holeZ };
+    
+    // Hole/Flag created
+    return holeZ;
+  }, []);
+  
+  // Effect to handle hole/flag updates when dependencies change
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    
+    const scene = sceneRef.current;
+    
+    // Calculate distance based on mode
+    let distanceFeet: number;
+    if (gameMode === 'swing') {
+      if (!puttingData.swingHoleYards) return;
+      distanceFeet = puttingData.swingHoleYards * 3;
+    } else {
+      distanceFeet = puttingData.holeDistance;
+    }
+    
+    // Create hole and flag
+    const holeZ = createHoleAndFlag(scene, distanceFeet, gameMode);
+    
+    // Adjust camera for swing mode
+    if (cameraRef.current && gameMode === 'swing') {
+      const camera = cameraRef.current;
+      camera.position.set(0, 80, 20);
+      camera.lookAt(0, 0, holeZ / 2);
+      camera.fov = 60;
+      camera.updateProjectionMatrix();
+      setCameraRadius(150);
+      scene.fog = null;
+    }
+  }, [sceneRef.current, puttingData.swingHoleYards, puttingData.holeDistance, gameMode, currentLevel]); // Removed createHoleAndFlag to prevent infinite loop
+
+  // Handle game mode changes - just update green size
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    
+    const updateGreenSize = (window as any).updateGreenSize;
+    if (!updateGreenSize) return;
+    
+    if (gameMode === 'swing') {
+      // Restore large green for swing mode
+      updateGreenSize(300); // 300 feet green for swing mode
+    } else {
+      // Use actual hole distance for putt mode
+      updateGreenSize(puttingData.holeDistance);
+    }
+  }, [gameMode, puttingData.holeDistance]);
+
   // Add automatic camera rotation (can be disabled when user interacts)
   useEffect(() => {
     if (!autoRotate) return;
@@ -127,19 +285,80 @@ export default function ExpoGL3DView({
     if (lastHoleDistance !== puttingData.holeDistance) {
       // Hole distance changed - update scene
 
-      // Update hole position
-      const updateHole = (window as any).updateHolePosition;
-      if (updateHole) {
-        const newHolePos = updateHole(puttingData.holeDistance);
+      // Update hole position using our centralized function
+      // This ensures consistency across all modes
+      if (sceneRef.current) {
+        const scene = sceneRef.current;
+        
+        // Remove old hole/flag elements
+        const toRemove = scene.children.filter(child => 
+          child.userData?.isFlag || 
+          child.userData?.isFlagstick ||
+          child.userData?.isHole
+        );
+        toRemove.forEach(child => {
+          scene.remove(child);
+          if ('geometry' in child) (child as any).geometry?.dispose();
+          if ('material' in child) (child as any).material?.dispose();
+        });
+        
+        // Recreate at new position
+        const createHoleAndFlagInline = (distanceFeet: number) => {
+          const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+          const worldUnitsPerFoot = getWorldUnitsPerFoot ? getWorldUnitsPerFoot(distanceFeet) : 1.0;
+          const holeZ = 4 - (distanceFeet * worldUnitsPerFoot);
+          
+          // Create hole elements (same as in initial creation)
+          const holeRadius = 0.15;
+          const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
+          const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+          const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+          hole.rotation.x = -Math.PI / 2;
+          hole.position.set(0, 0.02, holeZ);
+          hole.userData.isHole = true;
+          scene.add(hole);
+          
+          const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
+          const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+          const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(0, 0.021, holeZ);
+          ring.userData.isHole = true;
+          scene.add(ring);
+          
+          const flagstickHeight = 3.5;
+          const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
+          const flagstickMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+          const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
+          flagstick.position.set(0, flagstickHeight / 2, holeZ);
+          flagstick.userData.isFlagstick = true;
+          scene.add(flagstick);
+          
+          const flagGeometry = new THREE.PlaneGeometry(1.2, 0.8);
+          const flagMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xff0000, side: THREE.DoubleSide, emissive: 0xff0000, emissiveIntensity: 0.15
+          });
+          const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+          flag.position.set(0.6, flagstickHeight - 0.4, holeZ);
+          flag.userData.isFlag = true;
+          scene.add(flag);
+          
+          return { x: 0, y: 0.01, z: holeZ };
+        };
+        
+        const newHolePos = createHoleAndFlagInline(puttingData.holeDistance);
         (window as any).currentHolePosition = newHolePos;
         // Hole position updated
       }
 
-      // Update green size for long putts
-      const updateGreenSize = (window as any).updateGreenSize;
-      if (updateGreenSize) {
-        updateGreenSize(puttingData.holeDistance);
-        // Green size updated
+      // Update green size for long putts (ONLY in putt mode)
+      // In swing mode, we keep the original large green size
+      if (gameMode !== 'swing') {
+        const updateGreenSize = (window as any).updateGreenSize;
+        if (updateGreenSize) {
+          updateGreenSize(puttingData.holeDistance);
+          // Green size updated
+        }
       }
 
       // Auto-adjust camera zoom based on actual hole position using centralized scaling
@@ -175,13 +394,16 @@ export default function ExpoGL3DView({
     // Set up renderer
     const renderer = new Renderer({ gl });
     renderer.setSize(drawingBufferWidth, drawingBufferHeight);
-    renderer.setClearColor(0xf0f8ff); // Very light blue, almost white
+    renderer.setClearColor(0x87CEEB); // Sky blue for swing mode
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Enable depth testing
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
+    
+    // Set WebGL clear color to match THREE.js
+    gl.clearColor(0.5, 0.8, 0.9, 1.0); // Sky blue instead of pink
 
     rendererRef.current = renderer;
 
@@ -189,12 +411,12 @@ export default function ExpoGL3DView({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Set up camera
+    // Set up camera - EXTENDED FAR PLANE FOR SWING MODE
     const camera = new THREE.PerspectiveCamera(
       50,
       drawingBufferWidth / drawingBufferHeight,
       0.1,
-      100
+      500  // Extended to see far distances in swing mode
     );
     camera.position.set(0, 8, 12);
     // Start looking slightly down for better framing
@@ -426,8 +648,15 @@ export default function ExpoGL3DView({
       );
       existingIndicators.forEach(indicator => {
         scene.remove(indicator);
-        if (indicator.geometry) indicator.geometry.dispose();
-        if (indicator.material) indicator.material.dispose();
+        if ((indicator as THREE.Mesh).geometry) (indicator as THREE.Mesh).geometry.dispose();
+        if ((indicator as THREE.Mesh).material) {
+          const material = (indicator as THREE.Mesh).material;
+          if (Array.isArray(material)) {
+            material.forEach(m => m.dispose());
+          } else {
+            material.dispose();
+          }
+        }
       });
 
       if (slopeUpDown === 0 && slopeLeftRight === 0) return; // No indicators needed
@@ -1011,8 +1240,11 @@ export default function ExpoGL3DView({
     };
 
     const createHole = (holeDistanceFeet: number) => {
+      // Skip hole creation - unified flag system handles this
       const holePos = getHolePosition(holeDistanceFeet);
-
+      return holePos;
+      
+      /* OLD CODE - DISABLED
       // Create hole (perfect dark circle on the green)
       const holeRadius = 0.15; // Visible hole size
       const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
@@ -1125,6 +1357,7 @@ export default function ExpoGL3DView({
         opacity: 0.95,
       });
       
+      // Add the California flag 
       const flag = new THREE.Mesh(flagGeometry, flagMaterial);
       flag.position.set(holePos.x + 0.4, 2, holePos.z);
       flag.userData.isHole = true;
@@ -1174,7 +1407,10 @@ export default function ExpoGL3DView({
         return flagShadow;
       };
       
-      createFlagShadow();
+      // Only create flag shadow in putt mode
+      if (gameMode !== 'swing') {
+        createFlagShadow();
+      }
 
       // Use randomized spectator configuration
       const spectatorConfig = currentLevel 
@@ -2286,11 +2522,84 @@ export default function ExpoGL3DView({
 
       // console.log(`🕳️ Hole positioned at ${holeDistanceFeet}ft (Z: ${holePos.z})`);
       return holePos;
+      */ // END OF DISABLED CODE
     };
 
-    // Create initial hole
-    const currentHolePosition = createHole(puttingData.holeDistance);
+    // INITIAL HOLE CREATION - Use the centralized function
+    // Calculate initial distance
+    let initialDistanceFeet: number;
+    if (gameMode === 'swing' && puttingData.swingHoleYards) {
+      initialDistanceFeet = puttingData.swingHoleYards * 3;
+    } else {
+      initialDistanceFeet = puttingData.holeDistance;
+    }
+    
+    // Create the initial hole and flag using our helper function
+    const createInitialHole = () => {
+      // Creating initial hole
+      
+      // Use same logic as the effect but inline for initial creation
+      const worldUnitsPerFoot = getWorldUnitsPerFoot(initialDistanceFeet);
+      const holeZ = 4 - (initialDistanceFeet * worldUnitsPerFoot);
+      
+      // Create hole visual elements
+      const holeRadius = 0.15;
+      
+      // Black hole
+      const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
+      const holeMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x000000,
+        side: THREE.DoubleSide
+      });
+      const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+      hole.rotation.x = -Math.PI / 2;
+      hole.position.set(0, 0.02, holeZ);
+      hole.userData.isHole = true;
+      scene.add(hole);
+      
+      // White ring
+      const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
+      const ringMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.021, holeZ);
+      ring.userData.isHole = true;
+      scene.add(ring);
+      
+      // Flagstick
+      const flagstickHeight = gameMode === 'swing' && initialDistanceFeet > 100 ? 6 : 3.5;
+      const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
+      const flagstickMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+      const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
+      flagstick.position.set(0, flagstickHeight / 2, holeZ);
+      flagstick.userData.isFlagstick = true;
+      scene.add(flagstick);
+      
+      // Flag
+      const flagScale = gameMode === 'swing' && initialDistanceFeet > 100 ? 2.0 : 1.0;
+      const flagWidth = 1.2 * flagScale;
+      const flagHeight = 0.8 * flagScale;
+      const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
+      const flagMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xff0000,
+        side: THREE.DoubleSide,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.15
+      });
+      const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+      flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
+      flag.userData.isFlag = true;
+      scene.add(flag);
+      
+      return { x: 0, y: 0.01, z: holeZ };
+    };
+    
+    const currentHolePosition = createInitialHole();
     (window as any).currentHolePosition = currentHolePosition;
+    // Initial hole created
 
     // Create flying blimp with "BAD YEAR" text
     const createBlimp = () => {
@@ -2393,35 +2702,11 @@ export default function ExpoGL3DView({
 
     // Store hole update function
     const updateHolePosition = (newHoleDistanceFeet: number) => {
-      // Remove existing hole elements
-      const holeElements = scene.children.filter(child => child.userData && child.userData.isHole);
-      holeElements.forEach(element => {
-        scene.remove(element);
-        if (element.geometry) element.geometry.dispose();
-        if (element.material) element.material.dispose();
-      });
-      
-      // Remove existing robots, shadows, and accessories
-      const robotElements = scene.children.filter(child => child.userData && (
-        child.userData.isRobot || 
-        child.userData.isRobotShadow || 
-        child.userData.isRobotAccessory ||
-        child.userData.isPuttingRobot ||
-        child.userData.isPuttingRobotAccessory ||
-        child.userData.isCooler ||
-        child.userData.isFratRobot
-      ));
-      robotElements.forEach(element => {
-        scene.remove(element);
-        if (element.geometry) element.geometry.dispose();
-        if (element.material) element.material.dispose();
-      });
-
-      // Create hole at new position (this will also create new robot)
-      const newHolePos = createHole(newHoleDistanceFeet);
-      (window as any).currentHolePosition = newHolePos;
-      // console.log(`🔄 Hole moved to ${newHoleDistanceFeet}ft`);
-      return newHolePos;
+      // DEPRECATED - Hole position now managed by effects and createHoleAndFlag function
+      console.log('⚠️ updateHolePosition called (deprecated) - distance:', newHoleDistanceFeet);
+      const worldUnitsPerFoot = getWorldUnitsPerFoot(newHoleDistanceFeet);
+      const holeZ = 4 - (newHoleDistanceFeet * worldUnitsPerFoot);
+      return { x: 0, y: 0.01, z: holeZ };
     };
 
     // Green size update function for long putts
@@ -2433,20 +2718,35 @@ export default function ExpoGL3DView({
       
       if (existingGreen) {
         scene.remove(existingGreen);
-        existingGreen.geometry.dispose();
-        existingGreen.material.dispose();
+        (existingGreen as THREE.Mesh).geometry.dispose();
+        const material = (existingGreen as THREE.Mesh).material;
+        if (Array.isArray(material)) {
+          material.forEach(m => m.dispose());
+        } else {
+          material.dispose();
+        }
       }
       
       if (existingFringe) {
         scene.remove(existingFringe);
-        existingFringe.geometry.dispose();
-        existingFringe.material.dispose();
+        (existingFringe as THREE.Mesh).geometry.dispose();
+        const material = (existingFringe as THREE.Mesh).material;
+        if (Array.isArray(material)) {
+          material.forEach(m => m.dispose());
+        } else {
+          material.dispose();
+        }
       }
       
       if (existingFairway) {
         scene.remove(existingFairway);
-        existingFairway.geometry.dispose();
-        existingFairway.material.dispose();
+        (existingFairway as THREE.Mesh).geometry.dispose();
+        const material = (existingFairway as THREE.Mesh).material;
+        if (Array.isArray(material)) {
+          material.forEach(m => m.dispose());
+        } else {
+          material.dispose();
+        }
       }
 
       // Create new adaptive green
@@ -2527,8 +2827,8 @@ export default function ExpoGL3DView({
 
     const skyTexture = createEnhancedSkyTexture();
 
-    // Create enhanced sky sphere with better quality
-    const skyGeometry = new THREE.SphereGeometry(50, 64, 64); // Higher quality
+    // Create enhanced sky sphere with better quality - MUCH LARGER for swing mode
+    const skyGeometry = new THREE.SphereGeometry(500, 64, 64); // 10x larger for swing distances
     const skyMaterial = new THREE.MeshBasicMaterial({
       map: skyTexture,
       side: THREE.BackSide,
@@ -2537,22 +2837,44 @@ export default function ExpoGL3DView({
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
     scene.add(sky);
     
-    // Add subtle atmospheric fog for depth (very light, won't interfere with gameplay)
-    scene.fog = new THREE.Fog(0xe6f3ff, 30, 80); // Light blue fog, starts far away
+    // NO FOG AT ALL - IT'S BREAKING SWING MODE
+    // scene.fog = new THREE.Fog(0xe6f3ff, 30, 80);
+    scene.fog = null; // COMPLETELY DISABLE FOG
     
     // Skip adding distant trees for performance
 
     // Render loop
     const render = () => {
       if (rendererRef.current && sceneRef.current && cameraRef.current) {
-        // Update camera position based on angle, height, and radius (zoom)
-        const x = Math.sin(cameraAngle) * cameraRadius;
-        const z = Math.cos(cameraAngle) * cameraRadius;
-        cameraRef.current.position.set(x, cameraHeight, z);
-        
-        // Adjust look-at target based on distance to prevent dashboard clipping
-        const lookAtY = puttingData.holeDistance > 20 ? -2 : puttingData.holeDistance > 10 ? -1 : 0; // Look progressively lower for longer putts
-        cameraRef.current.lookAt(0, lookAtY, -2);
+        // DEBUG: Check what scene we're actually rendering
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const renderer = rendererRef.current;
+        // IN SWING MODE, DON'T OVERRIDE CAMERA POSITION!
+        if (gameMode === 'swing') {
+          // Swing mode - keep camera high and looking far
+          if (puttingData.swingHoleYards) {
+            const feet = puttingData.swingHoleYards * 3;
+            const holeZ = 4 - (feet * 0.25);
+            
+            // Keep camera looking at the flag position
+            cameraRef.current.lookAt(0, 0, holeZ);
+            
+            // Make sure FOV and far plane are correct
+            cameraRef.current.fov = 75;  // Wide FOV to see more
+            cameraRef.current.far = 1000; // Very far to see distant objects
+            cameraRef.current.updateProjectionMatrix();
+          }
+        } else {
+          // Putt mode - normal camera control
+          const x = Math.sin(cameraAngle) * cameraRadius;
+          const z = Math.cos(cameraAngle) * cameraRadius;
+          cameraRef.current.position.set(x, cameraHeight, z);
+          
+          // Adjust look-at target based on distance to prevent dashboard clipping
+          const lookAtY = puttingData.holeDistance > 20 ? -2 : puttingData.holeDistance > 10 ? -1 : 0; // Look progressively lower for longer putts
+          cameraRef.current.lookAt(0, lookAtY, -2);
+        }
         
         // Animate blimp
         if ((window as any).blimp) {
@@ -2608,8 +2930,8 @@ export default function ExpoGL3DView({
         // Animate all flags with realistic waving motion
         const time = Date.now() * 0.002; // Slower animation
         scene.children.forEach(child => {
-          if (child.userData.isFlag && child.geometry) {
-            const geometry = child.geometry;
+          if (child.userData.isFlag && (child as THREE.Mesh).geometry) {
+            const geometry = (child as THREE.Mesh).geometry;
             const positions = geometry.attributes.position;
             const originalPositions = geometry.userData.originalPositions;
             
@@ -2651,8 +2973,8 @@ export default function ExpoGL3DView({
 
         // Animate flag shadows to match flag waving
         scene.children.forEach(child => {
-          if (child.userData.isFlagShadow && child.geometry) {
-            const geometry = child.geometry;
+          if (child.userData.isFlagShadow && (child as THREE.Mesh).geometry) {
+            const geometry = (child as THREE.Mesh).geometry;
             const positions = geometry.attributes.position;
             const originalPositions = geometry.userData.originalPositions;
             
@@ -3053,8 +3375,24 @@ export default function ExpoGL3DView({
           const currentPos = trajectory[currentStep];
           ballRef.current.position.set(currentPos.x, currentPos.y, currentPos.z);
 
-          // Check if ball is close to hole during animation - FIXED: Use dynamic hole position
+          // UNIFIED HOLE POSITION CHECK - v8
+          // Always use the global hole position for consistency
           const currentHolePos = (window as any).currentHolePosition || { x: 0, y: 0.08, z: -4 };
+          
+          // Extra validation for swing challenges
+          if (gameMode === 'putt' && puttingData.swingHoleYards && puttingData.holeDistance) {
+            // Ensure hole is at the right distance for putting in swing challenge
+            const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+            if (getWorldUnitsPerFoot) {
+              const expectedZ = 4 - (puttingData.holeDistance * getWorldUnitsPerFoot(puttingData.holeDistance));
+              if (Math.abs(currentHolePos.z - expectedZ) > 0.5) {
+                console.warn('⚠️ Hole position may be incorrect. Expected Z:', expectedZ.toFixed(2), 'Actual:', currentHolePos.z.toFixed(2));
+                // Update to correct position
+                currentHolePos.z = expectedZ;
+                (window as any).currentHolePosition = currentHolePos;
+              }
+            }
+          }
           const holeCenter = new THREE.Vector3(
             currentHolePos.x,
             currentHolePos.y,
@@ -3100,8 +3438,33 @@ export default function ExpoGL3DView({
             return;
           }
           
-          // Simple hole detection - if ball is close enough to hole, it goes in!
-          if (distanceToHole <= 0.15) {
+          // UNIFIED HOLE DETECTION SYSTEM - v8
+          // Single source of truth for hole detection
+          const getHoleDetectionRadius = () => {
+            // In swing challenge putting, use larger radius since we're dealing with longer distances
+            if (gameMode === 'putt' && puttingData.swingHoleYards) {
+              // When putting in swing challenge, be more forgiving
+              return 0.25; // Increased from 0.2 for better detection
+            }
+            // Normal putting challenges
+            return 0.15;
+          };
+          
+          const holeDetectionRadius = getHoleDetectionRadius();
+          const isGoingIn = distanceToHole <= holeDetectionRadius;
+          
+          // Only log when ball is near hole to reduce spam
+          if (distanceToHole < 1.0) {
+            console.log('⛳ Hole detection:', {
+              distance: distanceToHole.toFixed(3),
+              threshold: holeDetectionRadius,
+              willGoIn: isGoingIn,
+              mode: gameMode,
+              swingChallenge: !!puttingData.swingHoleYards
+            });
+          }
+          
+          if (isGoingIn) {
             // Ball goes in hole - animate it dropping into the hole
             // Create a simple drop animation
             const dropSteps = 10;
@@ -3658,8 +4021,26 @@ export default function ExpoGL3DView({
           //   distanceToHole.toFixed(3)
           // );
 
-          // Check final position for success - must be in hole and not have bounced out
-          const success = distanceToHole <= 0.12 && ballRef.current?.visible === false; // Only success if ball disappeared
+          // UNIFIED SUCCESS DETECTION - Use same logic as hole detection
+          const getSuccessThreshold = () => {
+            if (gameMode === 'putt' && puttingData.swingHoleYards) {
+              return 0.25; // Same as hole detection radius for consistency
+            }
+            return 0.12;
+          };
+          
+          const successThreshold = getSuccessThreshold();
+          const success = distanceToHole <= successThreshold && ballRef.current?.visible === false;
+          
+          // Only log when ball is near hole or when successful
+          if (success || distanceToHole < 1.0) {
+            console.log('🎯 Final result:', {
+              distance: distanceToHole.toFixed(3),
+              threshold: successThreshold,
+              ballVisible: ballRef.current?.visible,
+              success: success
+            });
+          }
           const accuracy = Math.max(0, 100 - (distanceToHole / 2.0) * 100); // More forgiving accuracy calculation
 
           const actualRollDistance =

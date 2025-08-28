@@ -63,16 +63,28 @@ export class SwingPhysics {
     const { power, attackAngle, faceAngle, clubPath, strikeQuality } = this.swingData;
     
     // Club head speed based on power
-    const clubSpeed = this.clubSpec.maxClubSpeed * (power / 100);
+    // For realistic distances, ensure proper power scaling
+    const powerFactor = power / 100;
+    const clubSpeed = this.clubSpec.maxClubSpeed * powerFactor;
     
-    // Smash factor affected by strike quality
-    const smashFactor = this.clubSpec.smashFactor * strikeQuality;
+    // Smash factor - DON'T multiply by strike quality here, it reduces distance too much
+    // Strike quality should mainly affect accuracy, not raw distance
+    const smashFactor = this.clubSpec.smashFactor;
     
     // Ball speed in MPH
     const ballSpeedMPH = clubSpeed * smashFactor;
     
     // Convert to m/s for physics calculations
     const ballSpeed = ballSpeedMPH * SWING_CONSTANTS.MPH_TO_MS;
+    
+    console.log('🏌️ Launch conditions:', {
+      club: this.swingData.club,
+      power: power,
+      clubSpeed: clubSpeed.toFixed(1),
+      smashFactor: smashFactor.toFixed(2),
+      ballSpeedMPH: ballSpeedMPH.toFixed(1),
+      expectedDistance: this.clubSpec.typicalDistance * powerFactor
+    });
     
     // Dynamic loft = static loft + face angle effect + attack angle effect
     const dynamicLoft = this.clubSpec.loft + 
@@ -88,7 +100,7 @@ export class SwingPhysics {
     // Calculate spin rate (RPM)
     let spinRate = this.clubSpec.defaultSpinRate;
     spinRate *= (1 + spinLoft / 30); // Higher spin loft = more spin
-    spinRate *= strikeQuality; // Poor strikes add spin
+    // Don't multiply by strikeQuality for spin - it's already affecting other things
     spinRate = Math.max(1500, Math.min(12000, spinRate)); // Clamp to realistic range
     
     // Face to path determines side spin / spin axis
@@ -125,6 +137,14 @@ export class SwingPhysics {
     let vx = ballSpeed * Math.cos(launchRad) * Math.sin(directionRad);
     let vy = ballSpeed * Math.sin(launchRad);
     let vz = ballSpeed * Math.cos(launchRad) * Math.cos(directionRad);
+    
+    console.log('🚀 Initial velocities:', {
+      vx: vx.toFixed(2),
+      vy: vy.toFixed(2),
+      vz: vz.toFixed(2),
+      totalSpeed: Math.sqrt(vx*vx + vy*vy + vz*vz).toFixed(2),
+      ballSpeedMS: ballSpeed.toFixed(2)
+    });
     
     // Initial position (0, 0, 0)
     let x = 0, y = 0, z = 0;
@@ -222,6 +242,14 @@ export class SwingPhysics {
     
     // Total distance
     const total = carry + rollDistance;
+    
+    console.log('🎯 Flight result:', {
+      carry: carry.toFixed(1),
+      total: total.toFixed(1),
+      targetDistance: this.clubSpec.typicalDistance * (this.swingData.power / 100),
+      trajectoryPoints: trajectory.length,
+      landingPoint: { x: landingPoint.x.toFixed(1), z: landingPoint.z.toFixed(1) }
+    });
     
     // Flight time
     const flightTime = (trajectory.length - 1) * SWING_CONSTANTS.TIME_STEP;

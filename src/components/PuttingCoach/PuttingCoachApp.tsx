@@ -6,11 +6,30 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Dimensions,
+  ScrollView,
   Platform,
+  TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import ExpoGL3DView from './ExpoGL3DView';
 import { PuttingPhysics, PuttingResult } from './PuttingPhysics';
+import { SwingPhysics, SwingData, FlightResult } from './SwingPhysics';
+import { getCloseMessage } from '../../utils/messageHelpers';
+import { ClubType, CLUB_DATA, getClubList } from '../../constants/clubData';
+import SwingModeControls from './Controls/SwingModeControls';
+import { LEVEL_CONFIGS, LevelConfig, SWING_CHALLENGES, PUTTING_CHALLENGES } from '../../constants/levels';
+import { 
+  SwingChallengeProgress, 
+  initializeSwingChallenge, 
+  processSwingShot, 
+  processPuttShot,
+  isHoleCompleted,
+  getScoreType,
+  getDisplayDistance,
+  SwingChallengeHUD,
+  ShotSummary,
+  HoleCompletionSummary
+} from './SwingChallengeManager';
 
 interface PuttingStats {
   attempts: number;
@@ -20,12 +39,35 @@ interface PuttingStats {
   totalDistance: number;
 }
 
+interface UserSession {
+  completedLevels: number[];
+  bankBalance: number;
+  currentStreak: number;
+  totalEarnings: number;
+}
+
+// LEVEL_CONFIGS now imported from levels.ts including both putting and swing challenges
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-export default function PuttingCoachApp() {
+// Responsive panel dimensions
+const isSmallScreen = screenWidth < 480; // Phone size
+const isMediumScreen = screenWidth >= 480 && screenWidth < 768; // Small tablet
+const isLargeScreen = screenWidth >= 768; // Large tablet/desktop
+
+// Panel width based on screen size - Better responsiveness
+const getPanelWidth = () => {
+  if (isSmallScreen) return Math.min(screenWidth * 0.85, 340); // 85% width on phones, max 340px
+  if (isMediumScreen) return Math.min(screenWidth * 0.5, 400); // 50% width on small tablets, max 400px
+  return Math.min(screenWidth * 0.35, 450); // 35% width on large screens, max 450px
+};
+
+const panelWidth = getPanelWidth();
+
+export default function PuttingCoachAppMinimal() {
   // Putting parameters
-  const [distance, setDistance] = useState(10);
-  const [power, setPower] = useState(75);
+  const [distance, setDistance] = useState(10); // Putt power/strength in feet
+  const [holeDistance, setHoleDistance] = useState(8); // Actual distance to hole in feet
   const [aimAngle, setAimAngle] = useState(0); // -45 to +45 degrees
   const [greenSpeed, setGreenSpeed] = useState(10);
   // 4-directional slope system
@@ -33,11 +75,48 @@ export default function PuttingCoachApp() {
   const [slopeLeftRight, setSlopeLeftRight] = useState(0); // Positive = right slope, Negative = left slope
 
   // App state
+  const [gameMode, setGameMode] = useState<'putt' | 'swing'>('putt');
+  const [swingHoleYards, setSwingHoleYards] = useState<number | null>(null); // For swing challenges
   const [isPutting, setIsPutting] = useState(false);
-  const [showTrajectory, setShowTrajectory] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showSlopeModal, setShowSlopeModal] = useState(false);
-  const [lastResult, setLastResult] = useState<PuttingResult | null>(null);
+  const [showTrajectory, setShowTrajectory] = useState(true); // Show trajectory by default
+  const [showAimLine, setShowAimLine] = useState(true); // Show aim line by default
+  const [showMiniMap, setShowMiniMap] = useState(true); // Show mini map by default
+  const [lastTrajectory, setLastTrajectory] = useState<any[]>([]); // Store last trajectory for mini map
+  const [showControls, setShowControls] = useState(false);
+  const [lastResult, setLastResult] = useState<PuttingResult | FlightResult | null>(null);
+  
+  // Swing mode parameters
+  const [selectedClub, setSelectedClub] = useState<ClubType>('driver');
+  const [swingPower, setSwingPower] = useState(80); // 50-100%
+  const [attackAngle, setAttackAngle] = useState(0); // -5 to +5 degrees
+  const [faceAngle, setFaceAngle] = useState(0); // -10 to +10 degrees
+  const [clubPath, setClubPath] = useState(0); // -10 to +10 degrees
+  const [strikeQuality, setStrikeQuality] = useState(0.9); // 0.7 to 1.0
+  
+  // Challenge mode state
+  const [isChallengMode, setIsChallengMode] = useState(false);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
+  const [currentLevel, setCurrentLevel] = useState<number | null>(null);
+  const [challengeAttempts, setChallengeAttempts] = useState(0);
+  const [challengeComplete, setChallengeComplete] = useState(false);
+  
+  // Swing challenge tracking
+  const [swingChallengeProgress, setSwingChallengeProgress] = useState<SwingChallengeProgress | null>(null);
+  const [showShotSummary, setShowShotSummary] = useState(false);
+  const [lastShotResult, setLastShotResult] = useState<any>(null);
+  const [showChallengeTab, setShowChallengeTab] = useState<'putting' | 'swing'>('putting');
+  const [showChallengeIntro, setShowChallengeIntro] = useState(false);
+  const [challengeIntroText, setChallengeIntroText] = useState('');
+  const [showRewardAnimation, setShowRewardAnimation] = useState(false);
+  const [lastReward, setLastReward] = useState(0);
+
+  // User session state - Persistent game progress
+  const [userSession, setUserSession] = useState<UserSession>({
+    completedLevels: [],
+    bankBalance: 0,
+    currentStreak: 0,
+    totalEarnings: 0,
+  });
 
   // Statistics
   const [stats, setStats] = useState<PuttingStats>({
@@ -48,46 +127,46 @@ export default function PuttingCoachApp() {
     totalDistance: 0,
   });
 
+  // Simple show/hide for controls panel
+
   // Physics engine
   const physics = useRef(new PuttingPhysics());
 
-  // Get AI recommendation
-  const getRecommendation = useCallback(() => {
-    const params = {
-      distance,
-      power,
-      aimAngle,
-      slopeUpDown,
-      slopeLeftRight,
-      greenSpeed,
-      ballPosition: { x: 0, y: 0.021, z: 4 },
-      holePosition: { x: 0, y: 0, z: -4 },
-      windSpeed: 0,
-      windDirection: 0,
-      greenGrain: 0,
-    };
-
-    // For physics compatibility, convert to legacy greenSlope format
-    const legacyParams = {
-      ...params,
-      greenSlope: slopeLeftRight, // Left/right slope for curve effect
-    };
-    return physics.current.calculateRecommendedAim(legacyParams);
-  }, [distance, power, aimAngle, slopeUpDown, slopeLeftRight, greenSpeed]);
-
-  const recommendation = getRecommendation();
-
-  // Control handlers
+  // Control handlers with enhanced granularity
   const handleDistanceChange = (increment: number) => {
-    setDistance(prev => Math.max(1, Math.min(50, prev + increment)));
+    // Convert to inches for granular control: 1ft = 12 inches, min 3 inches, max 200ft (2400 inches)
+    setDistance(prev => {
+      const inchesValue = prev * 12 + increment; // Convert to inches and add increment
+      const clampedInches = Math.max(3, Math.min(2400, inchesValue)); // 3" to 200ft
+      return Math.round(clampedInches) / 12; // Convert back to feet with precision
+    });
   };
 
-  const handlePowerChange = (increment: number) => {
-    setPower(prev => Math.max(10, Math.min(100, prev + increment)));
+  const handleDistanceSet = (valueInFeet: number) => {
+    const inchesValue = Math.round(valueInFeet * 12); // Convert to inches for precision
+    const clampedInches = Math.max(3, Math.min(2400, inchesValue)); // 3" to 200ft
+    setDistance(clampedInches / 12); // Convert back to feet
+  };
+
+  const handleHoleDistanceChange = (increment: number) => {
+    // Convert to feet: 6 inches = 0.5ft, 150 feet = 150ft
+    setHoleDistance(prev => {
+      const newDistance = prev + increment;
+      return Math.max(0.5, Math.min(150, Math.round(newDistance * 2) / 2)); // Round to nearest 0.5 feet
+    });
   };
 
   const handleAimChange = (increment: number) => {
-    setAimAngle(prev => Math.max(-45, Math.min(45, prev + increment)));
+    // 0.25 degree increments
+    setAimAngle(prev => {
+      const newValue = prev + increment;
+      return Math.max(-45, Math.min(45, Math.round(newValue * 4) / 4)); // Round to nearest 0.25
+    });
+  };
+
+  const handleAimSet = (value: number) => {
+    const clampedValue = Math.max(-45, Math.min(45, Math.round(value * 4) / 4)); // Round to nearest 0.25
+    setAimAngle(clampedValue);
   };
 
   const handleGreenSpeedChange = (increment: number) => {
@@ -95,36 +174,180 @@ export default function PuttingCoachApp() {
   };
 
   const handleUpDownSlopeChange = (increment: number) => {
-    setSlopeUpDown(prev => Math.max(-20, Math.min(20, prev + increment)));
+    // 0.25 degree increments for slope
+    setSlopeUpDown(prev => {
+      const newValue = prev + increment;
+      return Math.max(-20, Math.min(20, Math.round(newValue * 4) / 4)); // Round to nearest 0.25
+    });
+  };
+
+  const handleUpDownSlopeSet = (value: number) => {
+    const clampedValue = Math.max(-20, Math.min(20, Math.round(value * 4) / 4)); // Round to nearest 0.25
+    setSlopeUpDown(clampedValue);
   };
 
   const handleLeftRightSlopeChange = (increment: number) => {
-    setSlopeLeftRight(prev => Math.max(-20, Math.min(20, prev + increment)));
+    // 0.25 degree increments for slope
+    setSlopeLeftRight(prev => {
+      const newValue = prev + increment;
+      return Math.max(-20, Math.min(20, Math.round(newValue * 4) / 4)); // Round to nearest 0.25
+    });
   };
 
-  const handlePutt = () => {
+  const handleLeftRightSlopeSet = (value: number) => {
+    const clampedValue = Math.max(-20, Math.min(20, Math.round(value * 4) / 4)); // Round to nearest 0.25
+    setSlopeLeftRight(clampedValue);
+  };
+
+  const handleShot = () => {
     if (isPutting) return;
     setIsPutting(true);
   };
 
-  const handlePuttComplete = (result: PuttingResult) => {
+  const handlePuttComplete = (result: PuttingResult | any) => {
+    console.log('🎯 Shot complete, result:', result);
     setIsPutting(false);
     setLastResult(result);
+    
+    // Store trajectory for mini map
+    if (result.trajectory) {
+      setLastTrajectory(result.trajectory);
+      console.log('📍 Trajectory stored, length:', result.trajectory.length);
+    }
+    
+    // Handle swing challenge shot
+    if (swingChallengeProgress && swingChallengeProgress.isActive) {
+      if ('carry' in result) {
+        // Swing shot
+        const shotResult = {
+          ...result,
+          club: selectedClub,
+          power: swingPower
+        };
+        
+        const updatedProgress = processSwingShot(swingChallengeProgress, shotResult);
+        setSwingChallengeProgress(updatedProgress);
+        setChallengeAttempts(updatedProgress.currentStroke); // Update attempts to match stroke count
+        setLastShotResult(shotResult);
+        setShowShotSummary(true);
+        
+        // Check if overshot the hole
+        const hasOvershot = updatedProgress.ballPositionYards > updatedProgress.holePositionYards;
+        
+        // Update hole distance for next shot (even in swing mode)
+        const remainingFeet = updatedProgress.remainingYards * 3;
+        setHoleDistance(remainingFeet);
+        console.log('🏌️ Updated hole distance:', remainingFeet, 'feet (', updatedProgress.remainingYards, 'yards remaining)');
+        
+        // Check if should switch to putt mode - only when very close
+        if (updatedProgress.remainingYards <= 10) { // Using standardized threshold
+          setGameMode('putt');
+          console.log('🎯 Switching to putt mode');
+        }
+        
+        // If overshot, need to aim back toward the hole
+        if (hasOvershot) {
+          console.log('⛳ Overshot! Ball at', updatedProgress.ballPositionYards, 'yards, hole at', updatedProgress.holePositionYards, 'yards');
+          // The camera and aiming should be handled in ExpoGL3DView
+        }
+        
+        // Check if hole completed
+        if (isHoleCompleted(updatedProgress)) {
+          setChallengeComplete(true);
+        }
+        
+        console.log('📊 Updated challenge progress:', updatedProgress);
+        return;
+      } else if (gameMode === 'putt') {
+        // Putt shot in swing challenge
+        console.log('🎯 Processing putt in swing challenge. Result success:', result.success);
+        
+        // First process the putt normally
+        const updatedProgress = processPuttShot(swingChallengeProgress, result);
+        setSwingChallengeProgress(updatedProgress);
+        setChallengeAttempts(updatedProgress.currentStroke);
+        
+        // Update hole distance for next shot
+        const remainingFeet = updatedProgress.remainingYards * 3;
+        setHoleDistance(remainingFeet);
+        console.log('⛳ After putt - remaining:', updatedProgress.remainingYards, 'yards (', remainingFeet, 'feet)');
+        
+        // Check if close enough to be in the hole (within 1.5 feet = 0.5 yards)
+        if (updatedProgress.remainingYards < 0.5) {
+          setChallengeComplete(true);
+          console.log('🎯 PUTT SUCCESSFUL - HOLE COMPLETED! Remaining:', updatedProgress.remainingYards, 'yards');
+          
+          // Force the hole distance to 0 to show completion
+          setHoleDistance(0);
+          
+          // Update progress to show completion
+          const completedProgress = {
+            ...updatedProgress,
+            remainingYards: 0,
+            ballPositionYards: updatedProgress.holePositionYards
+          };
+          setSwingChallengeProgress(completedProgress);
+          return;
+        }
+        
+        // Also check the regular hole completion
+        if (isHoleCompleted(updatedProgress)) {
+          setChallengeComplete(true);
+          console.log('🎯 Hole completed via isHoleCompleted check');
+        }
+        
+        console.log('⛳ Putt in swing challenge:', updatedProgress);
+        return;
+      }
+    }
+    
+    // Check if this is a swing result (has carry property)
+    if ('carry' in result && gameMode === 'swing') {
+      console.log('🏌️ Swing result - carry:', result.carry, 'total:', result.total);
+      setLastShotResult({...result, club: selectedClub, power: swingPower});
+      setShowShotSummary(true);
+      return;
+    }
 
-    // Update statistics
-    setStats(prev => ({
-      attempts: prev.attempts + 1,
-      makes: prev.makes + (result.success ? 1 : 0),
-      averageAccuracy:
-        (prev.averageAccuracy * prev.attempts + result.accuracy) / (prev.attempts + 1),
-      bestAccuracy: Math.max(prev.bestAccuracy, result.accuracy),
-      totalDistance: prev.totalDistance + result.rollDistance,
-    }));
-  };
+    // Handle challenge mode for putting
+    if (isChallengMode && currentLevel !== null) {
+      setChallengeAttempts(prev => prev + 1);
+      if (result.success) {
+        setChallengeComplete(true);
+        
+        // Award cash and update session
+        const level = LEVEL_CONFIGS.find(l => l.id === currentLevel);
+        if (level && !userSession.completedLevels.includes(currentLevel)) {
+          const reward = level.reward;
+          setLastReward(reward);
+          setShowRewardAnimation(true);
+          
+          setUserSession(prev => ({
+            ...prev,
+            completedLevels: [...prev.completedLevels, currentLevel],
+            bankBalance: prev.bankBalance + reward,
+            currentStreak: prev.currentStreak + 1,
+            totalEarnings: prev.totalEarnings + reward,
+          }));
+          
+          // Hide reward animation after 2 seconds
+          setTimeout(() => setShowRewardAnimation(false), 2000);
+        }
+      }
+    } else {
+      // Update statistics only in practice mode
+      setStats(prev => ({
+        attempts: prev.attempts + 1,
+        makes: prev.makes + (result.success ? 1 : 0),
+        averageAccuracy:
+          (prev.averageAccuracy * prev.attempts + result.accuracy) / (prev.attempts + 1),
+        bestAccuracy: Math.max(prev.bestAccuracy, result.accuracy),
+        totalDistance: prev.totalDistance + result.rollDistance,
+      }));
+    }
 
-  const handleUseRecommendation = () => {
-    setAimAngle(recommendation.aimAngle);
-    setPower(recommendation.power);
+    // Auto-hide result after 8 seconds (longer for detailed stats)
+    setTimeout(() => setLastResult(null), 8000);
   };
 
   const resetBall = () => {
@@ -133,6 +356,8 @@ export default function PuttingCoachApp() {
   };
 
   const resetStats = () => {
+    console.log('🔄 Resetting stats and settings...');
+    // Reset statistics
     setStats({
       attempts: 0,
       makes: 0,
@@ -141,287 +366,1263 @@ export default function PuttingCoachApp() {
       totalDistance: 0,
     });
     setLastResult(null);
+    console.log('✅ Stats reset complete');
   };
+
+  const resetSettings = () => {
+    console.log('🔄 Resetting all settings to defaults...');
+    setDistance(10);
+    setHoleDistance(8);
+    setAimAngle(0);
+    setGreenSpeed(10);
+    setSlopeUpDown(0);
+    setSlopeLeftRight(0);
+    setShowTrajectory(true);
+    console.log('✅ Settings reset complete');
+  };
+
+  // Toggle controls panel
+  const toggleControls = () => {
+    console.log('🍔 Toggling controls, current state:', showControls);
+    setShowControls(!showControls);
+    console.log('🍔 Controls toggled to:', !showControls);
+  };
+
+  // Auto-calculate power from distance (more distance = more power)
+  const calculatedPower = Math.min(100, Math.max(30, distance * 6));
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.logo}>🏌️ Putty Pro</Text>
-          <Text style={styles.subtitle}>AI Putting Coach</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={[styles.headerButton, showAdvanced && styles.headerButtonActive]}
-            onPress={() => setShowAdvanced(!showAdvanced)}
+      {/* Swing Challenge HUD */}
+      {swingChallengeProgress && swingChallengeProgress.isActive && (
+        <SwingChallengeHUD progress={swingChallengeProgress} />
+      )}
+      
+      {/* Compact Shot Summary (no overlay, auto-dismisses) */}
+      {showShotSummary && lastShotResult && swingChallengeProgress && (
+        <ShotSummary 
+          shotResult={lastShotResult}
+          progress={swingChallengeProgress}
+        />
+      )}
+      
+      {/* Hole Completion Modal */}
+      {challengeComplete && swingChallengeProgress && swingChallengeProgress.isActive && (
+        <View style={styles.completionOverlay}>
+          <HoleCompletionSummary progress={swingChallengeProgress} />
+          <TouchableOpacity 
+            style={styles.completionButton}
+            onPress={() => {
+              // Check if there's a next level
+              const nextLevelId = (swingChallengeProgress?.challengeId || 100) + 1;
+              const nextLevel = LEVEL_CONFIGS.find(l => l.id === nextLevelId);
+              
+              if (nextLevel) {
+                // Auto-advance to next swing challenge
+                setChallengeComplete(false);
+                const progress = initializeSwingChallenge(
+                  nextLevel.id,
+                  nextLevel.name,
+                  nextLevel.holeDistance,
+                  nextLevel.par || 4
+                );
+                setSwingChallengeProgress(progress);
+                setCurrentLevel(nextLevel.id);
+                setSwingHoleYards(nextLevel.holeDistance);
+                setGameMode('swing');
+                
+                // Show intro if available
+                if (nextLevel.introText) {
+                  setChallengeIntroText(nextLevel.introText);
+                  setShowChallengeIntro(true);
+                  setTimeout(() => setShowChallengeIntro(false), 6000);
+                }
+              } else {
+                // No more levels - return to menu
+                setChallengeComplete(false);
+                setIsChallengMode(false);
+                setCurrentLevel(null);
+                setSwingChallengeProgress(null);
+                setGameMode('putt');
+                resetSettings();
+              }
+            }}
           >
-            <Text style={styles.headerButtonText}>Advanced</Text>
+            <Text style={styles.completionButtonText}>
+              {LEVEL_CONFIGS.find(l => l.id === ((swingChallengeProgress?.challengeId || 100) + 1)) ? 
+                'Next Challenge →' : 'Back to Menu'}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton} onPress={resetStats}>
-            <Text style={styles.headerButtonText}>Reset</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+      )}
 
-      {/* Statistics Bar */}
-      <View style={styles.statsBar}>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Made</Text>
-          <Text style={styles.statValue}>
-            {stats.makes}/{stats.attempts}
-          </Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Success Rate</Text>
-          <Text style={styles.statValue}>
-            {stats.attempts > 0 ? Math.round((stats.makes / stats.attempts) * 100) : 0}%
-          </Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Avg Accuracy</Text>
-          <Text style={styles.statValue}>{stats.averageAccuracy.toFixed(1)}%</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Best</Text>
-          <Text style={styles.statValue}>{stats.bestAccuracy.toFixed(1)}%</Text>
-        </View>
-      </View>
-
-      {/* 3D Golf Scene */}
-      <View style={styles.sceneContainer}>
+      {/* Full Screen 3D View */}
+      <View style={styles.fullScreenScene}>
         <ExpoGL3DView
           puttingData={{
             distance,
-            power,
+            holeDistance,
+            power: calculatedPower,
             aimAngle,
             greenSpeed,
             slopeUpDown: slopeUpDown,
             slopeLeftRight: slopeLeftRight,
+            swingHoleYards: swingHoleYards || swingChallengeProgress?.remainingYards || null,
           }}
+          swingData={{
+            club: selectedClub,
+            power: swingPower,
+            attackAngle,
+            faceAngle,
+            clubPath,
+            strikeQuality,
+          }}
+          gameMode={gameMode}
           onPuttComplete={handlePuttComplete}
           isPutting={isPutting}
           showTrajectory={showTrajectory}
+          showAimLine={showAimLine}
+          currentLevel={currentLevel}
+          challengeAttempts={challengeAttempts}
         />
 
-        {/* Overlay controls */}
-        <View style={styles.sceneOverlay}>
-          <TouchableOpacity
-            style={[styles.overlayButton, showTrajectory && styles.overlayButtonActive]}
-            onPress={() => setShowTrajectory(!showTrajectory)}
-          >
-            <Text style={styles.overlayButtonText}>📈</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.overlayButton} onPress={resetBall}>
-            <Text style={styles.overlayButtonText}>↺</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* AI Recommendation Panel */}
-      {recommendation.confidence > 50 && (
-        <View style={styles.recommendationPanel}>
-          <View style={styles.recommendationHeader}>
-            <Text style={styles.recommendationTitle}>🤖 AI Recommendation</Text>
-            <Text style={styles.confidenceText}>{recommendation.confidence}% confident</Text>
-          </View>
-          <View style={styles.recommendationContent}>
-            <Text style={styles.recommendationText}>
-              Aim: {recommendation.aimAngle > 0 ? '+' : ''}
-              {recommendation.aimAngle.toFixed(1)}°, Power: {recommendation.power.toFixed(0)}%
-            </Text>
-            <TouchableOpacity style={styles.useButton} onPress={handleUseRecommendation}>
-              <Text style={styles.useButtonText}>Use</Text>
+        {/* Floating PUTT Button with Mode Selector - Repositioned */}
+        <View style={styles.floatingPuttContainer}>
+          <View style={styles.puttButtonGroup}>
+            <TouchableOpacity
+              style={[styles.floatingPuttButton, isPutting && styles.puttButtonDisabled]}
+              onPress={handleShot}
+              disabled={isPutting}
+            >
+              <Text style={styles.floatingPuttIcon}>🏌️</Text>
+              <Text style={styles.floatingPuttText}>
+                {isPutting 
+                  ? (gameMode === 'putt' ? 'PUTTING...' : 'SWINGING...') 
+                  : (gameMode === 'putt' ? 'PUTT' : 'SWING')
+                }
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modeSelectorButton}
+              onPress={() => setGameMode(gameMode === 'putt' ? 'swing' : 'putt')}
+            >
+              <Text style={styles.modeSelectorText}>▼</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.modeIndicator}>
+            <Text style={styles.modeIndicatorText}>
+              {gameMode === 'putt' ? '⛳ Putt Mode' : '🏌️ Swing Mode'}
+            </Text>
+          </View>
         </View>
-      )}
-
-      {/* Compact Control Panel */}
-      <View style={styles.controlPanel}>
-        {/* Single Row Primary Controls */}
-        <View style={styles.compactControls}>
-          {/* Distance */}
-          <View style={styles.compactControlGroup}>
-            <Text style={styles.compactLabel}>Dist</Text>
-            <View style={styles.compactRow}>
-              <TouchableOpacity
-                style={styles.compactButton}
-                onPress={() => handleDistanceChange(-1)}
+        
+        {/* Compact Mobile Quick Controls */}
+        <View style={styles.mobileGameControls}>
+          {gameMode === 'putt' ? (
+            // Putting controls
+            <>
+            {/* Compact Power */}
+            <View style={styles.mobileControlGroup}>
+              <Text style={styles.mobileControlLabel}>Pwr</Text>
+              <View style={styles.mobileButtonRow}>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-12)}>
+                  <Text style={styles.mobileControlButtonText}>--</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(-1)}>
+                  <Text style={styles.mobileControlButtonText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.mobileControlValue}>{distance.toFixed(0)}ft</Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(1)}>
+                  <Text style={styles.mobileControlButtonText}>+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleDistanceChange(12)}>
+                  <Text style={styles.mobileControlButtonText}>++</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Compact Aim */}
+            <View style={styles.mobileControlGroup}>
+              <Text style={styles.mobileControlLabel}>Aim</Text>
+              <View style={styles.mobileButtonRow}>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-1)}>
+                  <Text style={styles.mobileControlButtonText}>LL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(-0.25)}>
+                  <Text style={styles.mobileControlButtonText}>L</Text>
+                </TouchableOpacity>
+                <Text style={styles.mobileControlValue}>
+                  {aimAngle === 0 ? 'C' : aimAngle > 0 ? `R${aimAngle.toFixed(1)}` : `L${Math.abs(aimAngle).toFixed(1)}`}
+                </Text>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(0.25)}>
+                  <Text style={styles.mobileControlButtonText}>R</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mobileControlButton} onPress={() => handleAimChange(1)}>
+                  <Text style={styles.mobileControlButtonText}>RR</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            </>
+          ) : (
+            // Swing mode controls
+            <>
+              {/* Club Selection */}
+              <TouchableOpacity 
+                style={styles.mobileControlGroup}
+                onPress={() => {
+                  const clubs = getClubList();
+                  const currentIndex = clubs.indexOf(selectedClub);
+                  const nextIndex = (currentIndex + 1) % clubs.length;
+                  setSelectedClub(clubs[nextIndex]);
+                }}
               >
-                <Text style={styles.compactButtonText}>−</Text>
+                <Text style={styles.mobileControlLabel}>Club</Text>
+                <View style={styles.mobileButtonRow}>
+                  <Text style={[styles.mobileControlValue, { color: CLUB_DATA[selectedClub].color, fontSize: 12 }]}>
+                    {CLUB_DATA[selectedClub].shortName}
+                  </Text>
+                  <Text style={styles.mobileControlButtonText}>▼</Text>
+                </View>
               </TouchableOpacity>
-              <Text style={styles.compactValue}>{distance}</Text>
-              <TouchableOpacity
-                style={styles.compactButton}
-                onPress={() => handleDistanceChange(1)}
+              
+              {/* Swing Power */}
+              <View style={styles.mobileControlGroup}>
+                <Text style={styles.mobileControlLabel}>Pwr</Text>
+                <View style={styles.mobileButtonRow}>
+                  <TouchableOpacity style={styles.mobileControlButton} onPress={() => setSwingPower(Math.max(50, swingPower - 10))}>
+                    <Text style={styles.mobileControlButtonText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.mobileControlValue}>{swingPower}%</Text>
+                  <TouchableOpacity style={styles.mobileControlButton} onPress={() => setSwingPower(Math.min(100, swingPower + 10))}>
+                    <Text style={styles.mobileControlButtonText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              {/* Face Angle */}
+              <View style={styles.mobileControlGroup}>
+                <Text style={styles.mobileControlLabel}>Face</Text>
+                <View style={styles.mobileButtonRow}>
+                  <TouchableOpacity style={styles.mobileControlButton} onPress={() => setFaceAngle(Math.max(-10, faceAngle - 2))}>
+                    <Text style={styles.mobileControlButtonText}>←</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.mobileControlValue}>{faceAngle.toFixed(0)}°</Text>
+                  <TouchableOpacity style={styles.mobileControlButton} onPress={() => setFaceAngle(Math.min(10, faceAngle + 2))}>
+                    <Text style={styles.mobileControlButtonText}>→</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+
+
+        {/* Compact Horizontal Dashboard - Top of Screen */}
+        <View style={styles.dashboardBar}>
+          {/* Hamburger Menu Button */}
+          {!showControls && (
+            <TouchableOpacity style={styles.menuButton} onPress={toggleControls}>
+              <Text style={styles.menuButtonText}>☰</Text>
+            </TouchableOpacity>
+          )}
+          
+          {gameMode === 'putt' ? (
+            <>
+              {/* Putt Power */}
+              <View style={styles.dashboardItem}>
+                <Text style={styles.dashboardIcon}>⚡</Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>{distance.toFixed(1)}ft</Text>
+                  <Text style={styles.dashboardLabel}>Power</Text>
+                </View>
+              </View>
+
+              {/* Distance to Hole */}
+              <View style={styles.dashboardItem}>
+                <Text style={styles.dashboardIcon}>🎯</Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>
+                    {holeDistance < 1 ? `${(holeDistance * 12).toFixed(0)}"` : `${holeDistance.toFixed(1)}ft`}
+                  </Text>
+                  <Text style={styles.dashboardLabel}>To Hole</Text>
+                </View>
+              </View>
+
+              {/* Green Speed */}
+              <View style={styles.dashboardItem}>
+                <Text style={styles.dashboardIcon}>🌱</Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>{greenSpeed}</Text>
+                  <Text style={styles.dashboardLabel}>Green</Text>
+                </View>
+              </View>
+
+              {/* Slope */}
+              <View style={styles.dashboardItem}>
+                <Text style={styles.dashboardIcon}>⛰️</Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>
+                    {slopeUpDown === 0 && slopeLeftRight === 0
+                      ? 'Flat'
+                      : `${slopeUpDown > 0 ? `↑${slopeUpDown}` : slopeUpDown < 0 ? `↓${Math.abs(slopeUpDown)}` : ''}${slopeLeftRight > 0 ? `→${slopeLeftRight}` : slopeLeftRight < 0 ? `←${Math.abs(slopeLeftRight)}` : ''}`}
+                  </Text>
+                  <Text style={styles.dashboardLabel}>Slope</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            /* SWING MODE QUICK CONTROLS */
+            <>
+              {/* Club Selection */}
+              <TouchableOpacity 
+                style={styles.dashboardItem}
+                onPress={() => {
+                  // Cycle through clubs
+                  const clubs = getClubList();
+                  const currentIndex = clubs.indexOf(selectedClub);
+                  const nextIndex = (currentIndex + 1) % clubs.length;
+                  setSelectedClub(clubs[nextIndex]);
+                }}
               >
-                <Text style={styles.compactButtonText}>+</Text>
+                <Text style={styles.dashboardIcon}>🏌️</Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={[styles.dashboardValue, { color: CLUB_DATA[selectedClub].color }]}>
+                    {CLUB_DATA[selectedClub].shortName}
+                  </Text>
+                  <Text style={styles.dashboardLabel}>Club</Text>
+                </View>
               </TouchableOpacity>
-            </View>
-          </View>
 
-          {/* Aim */}
-          <View style={styles.compactControlGroup}>
-            <Text style={styles.compactLabel}>Aim</Text>
-            <View style={styles.compactRow}>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleAimChange(-2)}>
-                <Text style={styles.compactButtonText}>←</Text>
-              </TouchableOpacity>
-              <Text style={styles.compactValue}>
-                {aimAngle === 0 ? 'C' : aimAngle > 0 ? `R${aimAngle}` : `L${Math.abs(aimAngle)}`}
-              </Text>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handleAimChange(2)}>
-                <Text style={styles.compactButtonText}>→</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              {/* Power with Quick Adjust */}
+              <View style={styles.dashboardItem}>
+                <TouchableOpacity
+                  style={styles.quickAdjustButton}
+                  onPress={() => setSwingPower(Math.max(50, swingPower - 10))}
+                >
+                  <Text style={styles.quickAdjustText}>-</Text>
+                </TouchableOpacity>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>{swingPower}%</Text>
+                  <Text style={styles.dashboardLabel}>{Math.round(CLUB_DATA[selectedClub].typicalDistance * (swingPower / 100))}yd</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.quickAdjustButton}
+                  onPress={() => setSwingPower(Math.min(100, swingPower + 10))}
+                >
+                  <Text style={styles.quickAdjustText}>+</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Power */}
-          <View style={styles.compactControlGroup}>
-            <Text style={styles.compactLabel}>Power</Text>
-            <View style={styles.compactRow}>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handlePowerChange(-5)}>
-                <Text style={styles.compactButtonText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.compactValue}>{power}%</Text>
-              <TouchableOpacity style={styles.compactButton} onPress={() => handlePowerChange(5)}>
-                <Text style={styles.compactButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              {/* Face Angle Quick Control */}
+              <View style={styles.dashboardItem}>
+                <TouchableOpacity
+                  style={styles.quickAdjustButton}
+                  onPress={() => setFaceAngle(Math.max(-10, faceAngle - 2))}
+                >
+                  <Text style={styles.quickAdjustText}>←</Text>
+                </TouchableOpacity>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>
+                    {faceAngle > 0 ? `→${faceAngle}°` : faceAngle < 0 ? `←${Math.abs(faceAngle)}°` : '0°'}
+                  </Text>
+                  <Text style={styles.dashboardLabel}>Face</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.quickAdjustButton}
+                  onPress={() => setFaceAngle(Math.min(10, faceAngle + 2))}
+                >
+                  <Text style={styles.quickAdjustText}>→</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Settings Button */}
-          <TouchableOpacity
-            style={styles.settingsButtonMain}
-            onPress={() => setShowSlopeModal(true)}
+              {/* Shot Shape Display */}
+              <View style={styles.dashboardItem}>
+                <Text style={styles.dashboardIcon}>
+                  {faceAngle - clubPath > 2 ? '↰' : faceAngle - clubPath < -2 ? '↱' : '→'}
+                </Text>
+                <View style={styles.dashboardTextContainer}>
+                  <Text style={styles.dashboardValue}>
+                    {faceAngle - clubPath > 2 ? 'Fade' : faceAngle - clubPath < -2 ? 'Draw' : 'Straight'}
+                  </Text>
+                  <Text style={styles.dashboardLabel}>Shape</Text>
+                </View>
+              </View>
+            </>
+          )}
+          
+          {/* Bank removed - now in settings */}
+        </View>
+
+        {/* Stats Display */}
+        {stats.attempts > 0 && !isChallengMode && (
+          <View style={styles.statsOverlay}>
+            <Text style={styles.statText}>
+              {stats.makes}/{stats.attempts} ({Math.round((stats.makes / stats.attempts) * 100)}%)
+            </Text>
+          </View>
+        )}
+        
+        {/* Reward Animation */}
+        {showRewardAnimation && (
+          <View style={styles.rewardAnimation}>
+            <Text style={styles.rewardEmoji}>💵</Text>
+            <Text style={styles.rewardText}>+${lastReward}</Text>
+            <Text style={styles.rewardSubtext}>Level Complete!</Text>
+          </View>
+        )}
+        
+        {/* Challenge Intro Tooltip */}
+        {showChallengeIntro && (
+          <TouchableWithoutFeedback onPress={() => setShowChallengeIntro(false)}>
+            <View style={styles.challengeIntroTooltip}>
+              <TouchableOpacity 
+                style={styles.challengeIntroClose} 
+                onPress={() => setShowChallengeIntro(false)}
+              >
+                <Text style={styles.challengeIntroCloseText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.challengeIntroText}>{challengeIntroText}</Text>
+            </View>
+          </TouchableWithoutFeedback>
+        )}
+        
+        {/* Challenge header removed - info now in SwingChallengeHUD */}
+        {isChallengMode && challengeComplete && !swingChallengeProgress && (
+          <View style={styles.challengeSuccess}>
+            <Text style={styles.challengeSuccessText}>🎉 Complete!</Text>
+            <View style={styles.challengeButtonRow}>
+                  <TouchableOpacity 
+                    style={styles.challengeNextButton}
+                    onPress={() => {
+                      // Go to next level
+                      const nextLevel = LEVEL_CONFIGS.find(l => l.id === ((currentLevel || 0) + 1));
+                      if (nextLevel) {
+                        // Auto-advance to next level
+                        setTimeout(() => {
+                          setChallengeAttempts(0);
+                          setChallengeComplete(false);
+                          setCurrentLevel(nextLevel.id);
+                          
+                          // Show intro tooltip if text exists
+                          if (nextLevel.introText && nextLevel.introText.trim()) {
+                            setChallengeIntroText(nextLevel.introText);
+                            setShowChallengeIntro(true);
+                            setTimeout(() => setShowChallengeIntro(false), 6000);
+                          }
+                          
+                          // Set challenge parameters based on type
+                          if (nextLevel.type === 'swing') {
+                            // Initialize swing challenge
+                            const progress = initializeSwingChallenge(
+                              nextLevel.id,
+                              nextLevel.name,
+                              nextLevel.holeDistance,
+                              nextLevel.par || 3
+                            );
+                            setSwingChallengeProgress(progress);
+                            setGameMode('swing');
+                            setSwingHoleYards(nextLevel.holeDistance);
+                          } else {
+                            // Putting challenge
+                            setHoleDistance(nextLevel.holeDistance);
+                            setSlopeUpDown(nextLevel.slopeUpDown);
+                            setSlopeLeftRight(nextLevel.slopeLeftRight);
+                            setGreenSpeed(nextLevel.greenSpeed);
+                          }
+                          
+                          // Reset user controls
+                          setDistance(10);
+                          setAimAngle(0);
+                        }, 500); // Short delay for UX
+                      } else {
+                        // No more levels, go back to practice
+                        setIsChallengMode(false);
+                        setCurrentLevel(null);
+                        setChallengeComplete(false);
+                        setChallengeAttempts(0);
+                        resetSettings();
+                      }
+                    }}
+                  >
+                    <Text style={styles.challengeNextText}>
+                      {(currentLevel || 0) < LEVEL_CONFIGS.length ? 'Next Level →' : 'Complete!'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.challengeNextButton, styles.challengeBackButton]}
+                    onPress={() => {
+                      setIsChallengMode(false);
+                      setCurrentLevel(null);
+                      setChallengeComplete(false);
+                      setChallengeAttempts(0);
+                      resetSettings();
+                    }}
+                  >
+                    <Text style={styles.challengeNextText}>Exit</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+        
+        {/* Level Selection Button - Bottom Right */}
+        {!isChallengMode && (
+          <TouchableOpacity 
+            style={styles.levelSelectButton}
+            onPress={() => setShowLevelSelect(!showLevelSelect)}
           >
-            <Text style={styles.settingsButtonMainText}>⚙️</Text>
+            <Text style={styles.levelSelectIcon}>🏆</Text>
+            <Text style={styles.levelSelectText}>Challenges</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Putt Button - Centered and Prominent */}
-        <TouchableOpacity
-          style={[styles.puttButtonLarge, isPutting && styles.puttButtonDisabled]}
-          onPress={handlePutt}
-          disabled={isPutting}
-        >
-          <Text style={styles.puttButtonIcon}>🏌️</Text>
-          <Text style={styles.puttButtonTextLarge}>{isPutting ? 'PUTTING...' : 'PUTT'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Advanced Settings Modal */}
-      {showSlopeModal && (
-        <TouchableWithoutFeedback onPress={() => setShowSlopeModal(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Green Settings</Text>
-                  <TouchableWithoutFeedback onPress={() => setShowSlopeModal(false)}>
-                    <View style={styles.closeButton}>
-                      <Text style={styles.closeButtonText}>×</Text>
+        )}
+        
+        {/* Level Selection Menu */}
+        {showLevelSelect && (
+          <View style={styles.levelSelectMenu}>
+            <View style={styles.levelSelectHeader}>
+              <Text style={styles.levelSelectTitle}>Select Challenge</Text>
+              <TouchableOpacity onPress={() => setShowLevelSelect(false)}>
+                <Text style={styles.levelSelectClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.levelSelectScroll} showsVerticalScrollIndicator={false}>
+              {/* PUTTING CHALLENGES SECTION */}
+              <View style={styles.challengeSection}>
+                <Text style={styles.challengeSectionTitle}>⛳ Putting Challenges</Text>
+                <View style={styles.challengeSectionDivider} />
+              </View>
+              
+              {PUTTING_CHALLENGES.map((level) => {
+                const isUnlocked = true; // All levels are now unlocked by default
+                const isCompleted = userSession.completedLevels.includes(level.id);
+                
+                return (
+                  <TouchableOpacity
+                    key={level.id}
+                    style={[
+                      styles.levelItem,
+                      isCompleted && styles.levelItemCompleted
+                    ]}
+                    onPress={() => {
+                      
+                      // Setup challenge
+                      setIsChallengMode(true);
+                      setCurrentLevel(level.id);
+                      setShowLevelSelect(false);
+                      setChallengeAttempts(0);
+                      setChallengeComplete(false);
+                      
+                      // Switch to swing mode if it's a swing challenge
+                      if (level.type === 'swing') {
+                        setGameMode('swing');
+                        const progress = initializeSwingChallenge(
+                          level.id,
+                          level.name,
+                          level.holeDistance,
+                          level.par || 4
+                        );
+                        setSwingChallengeProgress(progress);
+                        setChallengeAttempts(0); // Reset attempts for swing challenges
+                        
+                        // Set hole distance for swing challenges (in yards * 3 = feet for display)
+                        setHoleDistance(level.holeDistance * 3);
+                        
+                        console.log('🏌️ Starting swing challenge:', level.name, 'Distance:', level.holeDistance, 'yards');
+                      } else {
+                        setGameMode('putt');
+                        setSwingChallengeProgress(null);
+                      }
+                      
+                      // Show intro tooltip if text exists
+                      if (level.introText && level.introText.trim()) {
+                        setChallengeIntroText(level.introText);
+                        setShowChallengeIntro(true);
+                        setTimeout(() => setShowChallengeIntro(false), 6000);
+                      }
+                      
+                      // Set challenge parameters
+                      // Hole distance already set above for swing challenges
+                      if (level.type !== 'swing') {
+                        setHoleDistance(level.holeDistance);
+                      }
+                      setSlopeUpDown(level.slopeUpDown);
+                      setSlopeLeftRight(level.slopeLeftRight);
+                      setGreenSpeed(level.greenSpeed);
+                      
+                      // Reset user controls to standard defaults
+                      setDistance(10); // Standard 10ft power
+                      setAimAngle(0); // Center aim
+                      
+                      // Hide settings panel if open
+                      setShowControls(false);
+                    }}
+                  >
+                    <View style={styles.levelItemContent}>
+                      <View style={styles.levelItemNumberContainer}>
+                        <Text style={styles.levelItemNumber}>{level.id}</Text>
+                        {isCompleted && <Text style={styles.levelCheckmark}>✓</Text>}
+                      </View>
+                      <View style={styles.levelItemInfo}>
+                        <Text style={styles.levelItemTitle}>{level.name}</Text>
+                        <Text style={styles.levelItemDesc}>{level.description}</Text>
+                        <Text style={styles.levelReward}>
+                          {isCompleted ? '✅ Earned' : `💰 $${level.reward}`}
+                        </Text>
+                      </View>
                     </View>
-                  </TouchableWithoutFeedback>
-                </View>
+                  </TouchableOpacity>
+                );
+              })}
+              
+              {/* SWING CHALLENGES SECTION */}
+              <View style={[styles.challengeSection, { marginTop: 20 }]}>
+                <Text style={styles.challengeSectionTitle}>🏌️ Swing Challenges</Text>
+                <View style={styles.challengeSectionDivider} />
+              </View>
+              
+              {SWING_CHALLENGES.map((level) => {
+                const isUnlocked = true; // All levels are now unlocked by default
+                const isCompleted = userSession.completedLevels.includes(level.id);
+                
+                return (
+                  <TouchableOpacity
+                    key={level.id}
+                    style={[
+                      styles.levelItem,
+                      isCompleted && styles.levelItemCompleted
+                    ]}
+                    onPress={() => {
+                      
+                      // Setup challenge
+                      setIsChallengMode(true);
+                      setCurrentLevel(level.id);
+                      setShowLevelSelect(false);
+                      setChallengeAttempts(0);
+                      setChallengeComplete(false);
+                      
+                      // Switch to swing mode for swing challenges
+                      setGameMode('swing');
+                      const progress = initializeSwingChallenge(
+                        level.id,
+                        level.name,
+                        level.holeDistance,
+                        level.par || 4
+                      );
+                      setSwingChallengeProgress(progress);
+                      setChallengeAttempts(0);
+                      setSwingHoleYards(level.holeDistance);
+                      
+                      // Set hole distance for swing challenges (in yards * 3 = feet for display)
+                      setHoleDistance(level.holeDistance * 3);
+                      
+                      console.log('🏌️ Starting swing challenge:', level.name, 'Distance:', level.holeDistance, 'yards');
+                      
+                      // Show intro tooltip if text exists
+                      if (level.introText && level.introText.trim()) {
+                        setChallengeIntroText(level.introText);
+                        setShowChallengeIntro(true);
+                        setTimeout(() => setShowChallengeIntro(false), 6000);
+                      }
+                      
+                      // Set challenge parameters
+                      setSlopeUpDown(level.slopeUpDown);
+                      setSlopeLeftRight(level.slopeLeftRight);
+                      setGreenSpeed(level.greenSpeed);
+                      
+                      // Reset user controls to standard defaults
+                      setDistance(10); // Standard 10ft power
+                      setAimAngle(0); // Center aim
+                      
+                      // Hide settings panel if open
+                      setShowControls(false);
+                    }}
+                  >
+                    <View style={styles.levelItemContent}>
+                      <View style={styles.levelItemNumberContainer}>
+                        <Text style={styles.levelItemNumber}>S{level.id - 100}</Text>
+                        {isCompleted && <Text style={styles.levelItemCheck}>✓</Text>}
+                      </View>
+                      <View style={styles.levelItemInfo}>
+                        <Text style={styles.levelItemName}>{level.name}</Text>
+                        <Text style={styles.levelItemDescription}>{level.description}</Text>
+                        <View style={styles.levelItemReward}>
+                          <Text style={styles.levelItemRewardText}>Par {level.par} • {level.holeDistance}yd</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
-                <View style={styles.modalSection}>
-                  <Text style={styles.sectionTitleModal}>Green Speed</Text>
-                  <View style={styles.modalControlRow}>
+        {/* Detailed Stats Popup */}
+        {lastResult && (
+          <View style={[styles.resultPopup, lastResult.success && styles.successPopup, styles.detailedResultPopup]}>
+            <View style={styles.resultHeader}>
+              <Text style={styles.resultText}>
+                {lastResult.success ? '🎉 HOLE!' : getCloseMessage(lastResult.accuracy)}
+              </Text>
+            </View>
+            <View style={styles.resultStats}>
+              {gameMode === 'putt' ? (
+                // Putting stats
+                <>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Distance:</Text>
+                    <Text style={styles.statValue}>{distance.toFixed(1)}ft</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Power:</Text>
+                    <Text style={styles.statValue}>{((distance / holeDistance) * 100).toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Aim:</Text>
+                    <Text style={styles.statValue}>{aimAngle.toFixed(1)}°</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Green Speed:</Text>
+                    <Text style={styles.statValue}>{greenSpeed}</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Roll Distance:</Text>
+                    <Text style={styles.statValue}>{('rollDistance' in lastResult ? lastResult.rollDistance : 0).toFixed(1)}ft</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Accuracy:</Text>
+                    <Text style={styles.statValue}>{lastResult.accuracy.toFixed(0)}%</Text>
+                  </View>
+                </>
+              ) : (
+                // Swing stats
+                <>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Club:</Text>
+                    <Text style={[styles.statValue, { color: CLUB_DATA[selectedClub].color }]}>
+                      {CLUB_DATA[selectedClub].name}
+                    </Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Power:</Text>
+                    <Text style={styles.statValue}>{swingPower}%</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Carry:</Text>
+                    <Text style={styles.statValue}>{(lastResult as any).carry}yd</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Total:</Text>
+                    <Text style={styles.statValue}>{(lastResult as any).total}yd</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Ball Speed:</Text>
+                    <Text style={styles.statValue}>{(lastResult as any).ballSpeed}mph</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Launch Angle:</Text>
+                    <Text style={styles.statValue}>{(lastResult as any).launchAngle}°</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Spin:</Text>
+                    <Text style={styles.statValue}>{(lastResult as any).spinRate}rpm</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Face Angle:</Text>
+                    <Text style={styles.statValue}>{faceAngle.toFixed(1)}°</Text>
+                  </View>
+                </>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={styles.dismissButton}
+              onPress={() => setLastResult(null)}
+            >
+              <Text style={styles.dismissButtonText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Bird's Eye View Mini Map */}
+        {showMiniMap && lastTrajectory.length > 0 && (
+          <View style={styles.miniMapContainer}>
+            <View style={styles.miniMapHeader}>
+              <Text style={styles.miniMapTitle}>Bird's Eye View</Text>
+              <TouchableOpacity 
+                onPress={() => setShowMiniMap(false)}
+                style={styles.miniMapClose}
+              >
+                <Text style={styles.miniMapCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.miniMapCanvas}>
+              {/* Draw trajectory path */}
+              <View style={styles.miniMapPath}>
+                {lastTrajectory.map((point, index) => {
+                  if (index === 0) return null;
+                  const scale = gameMode === 'swing' ? 0.5 : 5; // Different scale for swing vs putt
+                  const x = point.x * scale + 75; // Center at 75 (half of 150 width)
+                  const z = 100 - (point.z * scale); // Invert Z and offset from top
+                  
+                  return (
+                    <View
+                      key={index}
+                      style={[
+                        styles.miniMapDot,
+                        {
+                          left: Math.max(0, Math.min(145, x)),
+                          top: Math.max(0, Math.min(95, z)),
+                          opacity: 1 - (index / lastTrajectory.length) * 0.5,
+                        }
+                      ]}
+                    />
+                  );
+                })}
+                {/* Ball start position */}
+                <View style={[styles.miniMapBall, { left: 72, top: 80 }]} />
+                {/* Hole position */}
+                <View style={[styles.miniMapHole, { left: 72, top: gameMode === 'putt' ? 20 : 10 }]} />
+              </View>
+              {/* Distance scale */}
+              <Text style={styles.miniMapScale}>
+                {gameMode === 'putt' ? `${holeDistance}ft` : `${Math.round(CLUB_DATA[selectedClub].typicalDistance * (swingPower / 100))}yd`}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Toggle Mini Map Button */}
+        {!showMiniMap && lastTrajectory.length > 0 && (
+          <TouchableOpacity 
+            style={styles.miniMapToggle}
+            onPress={() => setShowMiniMap(true)}
+          >
+            <Text style={styles.miniMapToggleText}>🗺️</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Controls Panel - Responsive */}
+        {showControls && (
+          <View style={[styles.controlsPanel, { width: panelWidth }]}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelTitle}>Settings</Text>
+              <TouchableOpacity style={styles.closeButtonContainer} onPress={toggleControls}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Mode Toggle */}
+            <View style={styles.modeToggleContainer}>
+              <TouchableOpacity
+                style={[styles.modeToggleButton, gameMode === 'putt' && styles.modeToggleActive]}
+                onPress={() => setGameMode('putt')}
+              >
+                <Text style={[styles.modeToggleText, gameMode === 'putt' && styles.modeToggleTextActive]}>
+                  PUTT MODE
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeToggleButton, gameMode === 'swing' && styles.modeToggleActive]}
+                onPress={() => setGameMode('swing')}
+              >
+                <Text style={[styles.modeToggleText, gameMode === 'swing' && styles.modeToggleTextActive]}>
+                  SWING MODE
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.scrollableContent}
+              contentContainerStyle={styles.scrollContentContainer}
+              showsVerticalScrollIndicator={true}
+              bounces={false}
+              nestedScrollEnabled={true}
+              scrollEnabled={true}
+            >
+              {/* Conditional Controls Based on Mode */}
+              {gameMode === 'putt' ? (
+                <>
+                  {/* PRIMARY CONTROLS - Putt Mode */}
+                  <View style={styles.primarySection}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>🏌️ Primary Controls</Text>
+                    </View>
+                    
+                    {/* Putt Power */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Putt Power</Text>
+                  <View style={styles.compactControlRow}>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleGreenSpeedChange(-0.5)}
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(-12)}
                     >
-                      <Text style={styles.modalButtonText}>Slower</Text>
+                      <Text style={styles.compactButtonText}>−−</Text>
                     </TouchableOpacity>
-                    <Text style={styles.modalValue}>{greenSpeed}</Text>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleGreenSpeedChange(0.5)}
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(-1)}
                     >
-                      <Text style={styles.modalButtonText}>Faster</Text>
+                      <Text style={styles.compactButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.compactTextInput}
+                      value={distance.toFixed(1)}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleDistanceSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>ft</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(1)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleDistanceChange(12)}
+                    >
+                      <Text style={styles.compactButtonText}>++</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
-                <View style={styles.modalSection}>
-                  <Text style={styles.sectionTitleModal}>Slope - Up/Down</Text>
-                  <View style={styles.modalControlRow}>
+                {/* Aim */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Aim</Text>
+                  <View style={styles.compactControlRow}>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleUpDownSlopeChange(-1)}
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(-1)}
                     >
-                      <Text style={styles.modalButtonText}>⬇ Down</Text>
+                      <Text style={styles.compactButtonText}>←←</Text>
                     </TouchableOpacity>
-                    <Text style={styles.modalValue}>
-                      {slopeUpDown === 0
-                        ? 'Flat'
-                        : slopeUpDown > 0
-                          ? `Up ${slopeUpDown}%`
-                          : `Down ${Math.abs(slopeUpDown)}%`}
-                    </Text>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleUpDownSlopeChange(1)}
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(-0.25)}
                     >
-                      <Text style={styles.modalButtonText}>⬆ Up</Text>
+                      <Text style={styles.compactButtonText}>←</Text>
                     </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={styles.sectionTitleModal}>Slope - Left/Right</Text>
-                  <View style={styles.modalControlRow}>
+                    <TextInput
+                      style={styles.compactTextInput}
+                      value={aimAngle.toString()}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleAimSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>°</Text>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleLeftRightSlopeChange(-1)}
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(0.25)}
                     >
-                      <Text style={styles.modalButtonText}>⬅ Left</Text>
+                      <Text style={styles.compactButtonText}>→</Text>
                     </TouchableOpacity>
-                    <Text style={styles.modalValue}>
-                      {slopeLeftRight === 0
-                        ? 'Flat'
-                        : slopeLeftRight > 0
-                          ? `Right ${slopeLeftRight}%`
-                          : `Left ${Math.abs(slopeLeftRight)}%`}
-                    </Text>
                     <TouchableOpacity
-                      style={styles.modalButton}
-                      onPress={() => handleLeftRightSlopeChange(1)}
+                      style={styles.compactButton}
+                      onPress={() => handleAimChange(1)}
                     >
-                      <Text style={styles.modalButtonText}>➡ Right</Text>
+                      <Text style={styles.compactButtonText}>→→</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      )}
 
-      {/* Result Display */}
-      {lastResult && (
-        <View style={[styles.resultPanel, lastResult.success && styles.successPanel]}>
-          <Text style={styles.resultTitle}>
-            {lastResult.success ? '🎉 HOLE IN ONE!' : '⛳ Close!'}
-          </Text>
-          <View style={styles.resultStats}>
-            <Text style={styles.resultStat}>
-              Accuracy: {lastResult.accuracy?.toFixed(1) || '0.0'}%
-            </Text>
-            <Text style={styles.resultStat}>
-              Roll: {lastResult.rollDistance?.toFixed(1) || '0.0'}ft
-            </Text>
-            <Text style={styles.resultStat}>
-              Time: {lastResult.timeToHole?.toFixed(1) || '0.0'}s
-            </Text>
+              {/* PUTTING CONFIGURATION - Grouped - Hidden in Challenge Mode */}
+              {!isChallengMode && (
+              <View style={styles.configSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>⚙️ Putting Configuration</Text>
+                </View>
+                
+                {/* Distance to Hole */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Distance to Hole</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleHoleDistanceChange(-0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.compactValue}>
+                      {holeDistance < 1 ? `${(holeDistance * 12).toFixed(1)}"` : `${holeDistance.toFixed(1)}ft`}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleHoleDistanceChange(0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Green Speed */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Green Speed</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleGreenSpeedChange(-0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.compactValue}>{greenSpeed}</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleGreenSpeedChange(0.5)}
+                    >
+                      <Text style={styles.compactButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Slope Up/Down */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Slope Up/Down</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(-1)}
+                    >
+                      <Text style={styles.compactButtonText}>⬇⬇</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(-0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>⬇</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.compactTextInput}
+                      value={slopeUpDown.toString()}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleUpDownSlopeSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>°</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>⬆</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleUpDownSlopeChange(1)}
+                    >
+                      <Text style={styles.compactButtonText}>⬆⬆</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Slope Left/Right */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Slope Left/Right</Text>
+                  <View style={styles.compactControlRow}>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(-1)}
+                    >
+                      <Text style={styles.compactButtonText}>⬅⬅</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(-0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>⬅</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.compactTextInput}
+                      value={slopeLeftRight.toString()}
+                      onChangeText={text => {
+                        const value = parseFloat(text);
+                        if (!isNaN(value)) handleLeftRightSlopeSet(value);
+                      }}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                    <Text style={styles.compactUnitLabel}>°</Text>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(0.25)}
+                    >
+                      <Text style={styles.compactButtonText}>➡</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.compactButton}
+                      onPress={() => handleLeftRightSlopeChange(1)}
+                    >
+                      <Text style={styles.compactButtonText}>➡➡</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Visual Options */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Visual Options</Text>
+                  <View style={styles.optionButtonsRow}>
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, showTrajectory && styles.compactOptionButtonActive]}
+                      onPress={() => setShowTrajectory(!showTrajectory)}
+                    >
+                      <Text
+                        style={[
+                          styles.compactOptionText,
+                          showTrajectory && styles.compactOptionTextActive,
+                        ]}
+                      >
+                        Path
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, showAimLine && styles.compactOptionButtonActive]}
+                      onPress={() => setShowAimLine(!showAimLine)}
+                    >
+                      <Text
+                        style={[
+                          styles.compactOptionText,
+                          showAimLine && styles.compactOptionTextActive,
+                        ]}
+                      >
+                        Aim Line
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Quick Actions */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>Quick Actions</Text>
+                  <View style={styles.optionButtonsRow}>
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, styles.testButton]}
+                      onPress={() => {
+                        console.log('🚨 EXTREME SLOPE TEST BUTTON CLICKED!');
+                        console.log('🚨 Setting EXTREME slope: +20% Up/Down');
+                        setSlopeUpDown(20);
+                        setTimeout(() => {
+                          console.log('🚨 Resetting slope to 0');
+                          setSlopeUpDown(0);
+                        }, 4000);
+                      }}
+                    >
+                      <Text style={[styles.compactOptionText, styles.testButtonText]}>
+                        Test
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.compactOptionButton} onPress={resetStats}>
+                      <Text style={styles.compactOptionText}>Reset Stats</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.compactOptionButton, styles.resetButton]}
+                      onPress={resetSettings}
+                    >
+                      <Text style={[styles.compactOptionText, styles.resetButtonText]}>
+                        Reset All
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                {/* Exit Button - Show during challenges or when in game */}
+                {(isChallengMode || swingChallengeProgress?.isActive || gameMode === 'swing' || showControls) && (
+                  <View style={styles.compactControlItem}>
+                    <TouchableOpacity
+                      style={[styles.exitChallengeButton]}
+                      onPress={() => {
+                        // Exit to main menu
+                        setChallengeComplete(false);
+                        setIsChallengMode(false);
+                        setCurrentLevel(null);
+                        setChallengeAttempts(0);
+                        setSwingChallengeProgress(null);
+                        setGameMode('putt');
+                        resetSettings();
+                        // Close the settings panel and show level select
+                        setShowControls(false);
+                        setShowLevelSelect(true);
+                      }}
+                    >
+                      <Text style={styles.exitChallengeText}>
+                        🚪 {(isChallengMode || swingChallengeProgress?.isActive) ? 'Exit Challenge' : 'Exit'} to Main Menu
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                {/* Bank Balance Section */}
+                <View style={styles.compactControlItem}>
+                  <Text style={styles.compactControlLabel}>💰 Bank Balance</Text>
+                  <View style={styles.bankDetailsContainer}>
+                    <Text style={styles.bankBalanceText}>${userSession.bankBalance}</Text>
+                    <Text style={styles.bankSubText}>Total Earnings: ${userSession.totalEarnings}</Text>
+                    <Text style={styles.bankSubText}>Current Streak: {userSession.currentStreak}</Text>
+                  </View>
+                </View>
+              </View>
+              )}
+                </>
+              ) : (
+                /* SWING MODE CONTROLS */
+                <>
+                  <SwingModeControls
+                    selectedClub={selectedClub}
+                    setSelectedClub={setSelectedClub}
+                    swingPower={swingPower}
+                    setSwingPower={setSwingPower}
+                    attackAngle={attackAngle}
+                    setAttackAngle={setAttackAngle}
+                    faceAngle={faceAngle}
+                    setFaceAngle={setFaceAngle}
+                    clubPath={clubPath}
+                    setClubPath={setClubPath}
+                    strikeQuality={strikeQuality}
+                    setStrikeQuality={setStrikeQuality}
+                  />
+                  
+                  {/* Exit Button for Swing Mode */}
+                  <View style={styles.compactControlItem}>
+                    <TouchableOpacity
+                      style={[styles.exitChallengeButton]}
+                      onPress={() => {
+                        // Exit to main menu
+                        setChallengeComplete(false);
+                        setIsChallengMode(false);
+                        setCurrentLevel(null);
+                        setChallengeAttempts(0);
+                        setSwingChallengeProgress(null);
+                        setGameMode('putt');
+                        resetSettings();
+                        // Close the settings panel and show level select
+                        setShowControls(false);
+                        setShowLevelSelect(true);
+                      }}
+                    >
+                      <Text style={styles.exitChallengeText}>
+                        🚪 Exit to Main Menu
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
           </View>
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 }
@@ -429,482 +1630,1249 @@ export default function PuttingCoachApp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  headerLeft: {
-    flexDirection: 'column',
-  },
-  logo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2d5a2d',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: -2,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    backgroundColor: '#f0f0f0',
-  },
-  headerButtonActive: {
-    backgroundColor: '#4CAF50',
-  },
-  headerButtonText: {
-    fontSize: 14,
-    color: '#333333',
-    fontWeight: '600',
-  },
-  statsBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 8,
-    backgroundColor: '#f8f8f8',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 10,
-    color: '#666666',
-    marginBottom: 2,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2d5a2d',
-  },
-  sceneContainer: {
+  fullScreenScene: {
     flex: 1,
     position: 'relative',
   },
-  sceneOverlay: {
+  topControls: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    zIndex: 100,
+  },
+  dashboardBar: {
     position: 'absolute',
     top: 10,
+    left: 10,
     right: 10,
-    flexDirection: 'column',
-    gap: 10,
-  },
-  overlayButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 6,
+    zIndex: 100,
   },
-  overlayButtonActive: {
-    backgroundColor: '#4CAF50',
+  dashboardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
-  overlayButtonText: {
+  dashboardIcon: {
     fontSize: 18,
+    marginRight: 6,
   },
-  recommendationPanel: {
-    backgroundColor: '#f0f8ff',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#4CAF50',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  recommendationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  dashboardTextContainer: {
     alignItems: 'center',
-    marginBottom: 5,
   },
-  recommendationTitle: {
+  dashboardValue: {
     fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  dashboardLabel: {
+    fontSize: 9,
+    color: 'rgba(255, 255, 255, 0.6)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  menuButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  menuButtonText: {
+    fontSize: 20,
+    color: '#fff',
     fontWeight: 'bold',
-    color: '#2d5a2d',
   },
-  confidenceText: {
-    fontSize: 12,
-    color: '#666666',
+  distanceContainer: {
+    width: '100%',
   },
-  recommendationContent: {
+  distanceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  distanceIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  iconText: {
+    fontSize: 16,
+  },
+  distanceInfo: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  distanceValue: {
+    color: '#4CAF50',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  actualDistanceValue: {
+    color: '#FF9800',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  greenSpeedValue: {
+    color: '#9C27B0',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  aimValue: {
+    color: '#2196F3',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  slopeValue: {
+    color: '#F44336',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  distanceLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  separatorLine: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginVertical: 8,
+  },
+  aimContainer: {
+    width: '100%',
+  },
+  slopeContainer: {
+    width: '100%',
+  },
+  floatingPuttContainer: {
+    position: 'absolute',
+    bottom: 20, // Even lower, was 40
+    left: 0,
+    right: 0,
     alignItems: 'center',
   },
-  recommendationText: {
-    fontSize: 14,
-    color: '#333333',
-    flex: 1,
+  floatingPuttButton: {
+    paddingHorizontal: 24, // Smaller, was 40
+    paddingVertical: 10, // Smaller, was 15
+    borderTopLeftRadius: 20, 
+    borderBottomLeftRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6, // Smaller gap
   },
-  useButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 15,
+  puttButtonDisabled: {
+    backgroundColor: '#999999',
   },
-  useButtonText: {
+  floatingPuttIcon: {
+    fontSize: 18, // Smaller, was 24
+  },
+  floatingPuttText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 14, // Smaller, was 18
     fontWeight: 'bold',
   },
-  controlPanel: {
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  compactControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  controlsToggle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 8,
   },
-  compactControlGroup: {
-    alignItems: 'center',
-    flex: 1,
+  controlsToggleText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
-  compactLabel: {
-    fontSize: 10,
-    color: '#666666',
-    marginBottom: 4,
+  statsOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 8,
+    borderRadius: 8,
+  },
+  statText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
-  compactRow: {
-    flexDirection: 'row',
+  resultPopup: {
+    position: 'absolute',
+    top: '30%',
+    left: '10%',
+    right: '10%',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    padding: 15,
+    borderRadius: 16,
     alignItems: 'center',
-    gap: 6,
+    zIndex: 1000,
+    elevation: 20,
   },
-  compactButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
+  successPopup: {
+    backgroundColor: 'rgba(76, 175, 80, 0.95)',
   },
-  compactButtonText: {
-    fontSize: 16,
-    color: '#333333',
-    fontWeight: 'bold',
-  },
-  compactValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333333',
-    minWidth: 35,
-    textAlign: 'center',
-  },
-  settingsButtonMain: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#666666',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsButtonMainText: {
+  resultText: {
+    color: 'white',
     fontSize: 18,
-    color: '#ffffff',
-  },
-  puttButtonLarge: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 40,
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
-    alignSelf: 'center',
-    minWidth: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  puttButtonTextLarge: {
-    fontSize: 16,
-    color: '#ffffff',
     fontWeight: 'bold',
-    marginTop: 2,
   },
-  controlGroup: {
-    alignItems: 'center',
+  controlsPanel: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    height: '100vh' as any, // Use viewport height for full screen coverage
+    // Width is now dynamic based on screen size
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 1000,
+    display: 'flex' as any,
+    flexDirection: 'column' as any,
+  },
+  scrollableContent: {
     flex: 1,
+    overflow: 'auto' as any, // Allow scrolling when needed
+    backgroundColor: 'transparent',
+  },
+  scrollContentContainer: {
+    paddingBottom: 20, // Reduced bottom padding to remove white space
+    paddingTop: 10,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: isSmallScreen ? 12 : 16, // Reduced padding
+    paddingTop: Platform.OS === 'ios' && isSmallScreen ? 50 : 20,
+    paddingBottom: 12, // Reduced padding
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    height: Platform.OS === 'ios' && isSmallScreen ? 95 : 75, // Reduced height
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    flexShrink: 0,
+  },
+  panelTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  closeButtonContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  modeToggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    padding: 4,
+  },
+  modeToggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modeToggleActive: {
+    backgroundColor: '#4CAF50',
+  },
+  modeToggleText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  modeToggleTextActive: {
+    color: '#fff',
+  },
+  controlItem: {
+    paddingHorizontal: isSmallScreen ? 16 : 20, // Less padding on small screens
+    paddingVertical: isSmallScreen ? 16 : 12, // More vertical padding on small screens for better touch targets
   },
   controlLabel: {
     fontSize: 12,
-    color: '#666666',
-    marginBottom: 8,
+    color: '#666',
+    marginBottom: 4,
     fontWeight: '600',
+  },
+  controlSubLabel: {
+    fontSize: 10,
+    color: '#999',
+    marginBottom: 8,
+    fontStyle: 'italic',
+    lineHeight: 12,
   },
   controlRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
   controlButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e0e0e0',
+    width: isSmallScreen ? 44 : 36, // Larger touch targets on mobile
+    height: isSmallScreen ? 44 : 36,
+    borderRadius: isSmallScreen ? 22 : 18,
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    minWidth: 44, // Ensure minimum touch target size
+    minHeight: 44,
   },
   controlButtonText: {
-    fontSize: 20,
-    color: '#333333',
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#333',
   },
   controlValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#333333',
-    minWidth: 50,
+    color: '#333',
+    minWidth: 80,
     textAlign: 'center',
   },
-  puttButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 25,
-    paddingVertical: 12,
-    borderRadius: 25,
-    alignItems: 'center',
-    minWidth: 90,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  puttButtonDisabled: {
-    backgroundColor: '#cccccc',
-  },
-  puttButtonIcon: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  puttButtonText: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  advancedControls: {
+  slopeSection: {
+    marginTop: 20,
+    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
-    paddingTop: 15,
   },
-  advancedRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  advancedControl: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  smallButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  smallButtonText: {
-    fontSize: 16,
-    color: '#333333',
-    fontWeight: 'bold',
-  },
-  smallValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333333',
-    minWidth: 50,
-    textAlign: 'center',
-  },
-  resultPanel: {
-    backgroundColor: '#fff3e0',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff9800',
-  },
-  successPanel: {
-    backgroundColor: '#e8f5e8',
-    borderLeftColor: '#4CAF50',
-  },
-  resultTitle: {
+  sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#333',
+    marginBottom: 12,
+    paddingHorizontal: 20,
   },
-  resultStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  optionsSection: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    paddingHorizontal: 20,
+    gap: 10,
   },
-  resultStat: {
-    fontSize: 12,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  slopeContainer: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
-  },
-  slopeTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333333',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  slopeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  slopeLabel: {
-    fontSize: 12,
-    color: '#666666',
-    fontWeight: '600',
-    flex: 1,
-  },
-  slopeControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 2,
-    justifyContent: 'center',
-  },
-  slopeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  slopeButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
+  completionOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    zIndex: 2000,
+  },
+  completionButton: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+  },
+  completionButtonText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  optionButton: {
+    backgroundColor: '#f0f0f0',
+    padding: isSmallScreen ? 16 : 12, // More padding on small screens
+    borderRadius: 8,
+    alignItems: 'center',
+    minHeight: 48, // Ensure good touch target
+  },
+  optionButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  optionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  optionButtonActiveText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  testButton: {
+    backgroundColor: '#9c27b0',
+  },
+  testButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  resetButton: {
+    backgroundColor: '#ff6b6b',
+  },
+  resetButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  exitChallengeButton: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
+    marginTop: 10,
+    width: '100%',
+    alignItems: 'center',
+  },
+  exitChallengeText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  // New styles for enhanced controls
+  textInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 70,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  unitLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+    fontWeight: '600',
+    minWidth: 20,
+  },
+  granularityHelp: {
+    fontSize: 11,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  
+  // New compact styles
+  primarySection: {
+    backgroundColor: '#f8f9fa',
+    marginBottom: 8,
+  },
+  configSection: {
+    backgroundColor: 'white',
+  },
+  sectionHeader: {
+    backgroundColor: '#e9ecef',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+  },
+  compactControlItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f9fa',
+  },
+  compactControlLabel: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  compactControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  compactButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#e9ecef',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContent: {
-    backgroundColor: 'white',
+  compactButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  compactTextInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minWidth: 50,
+    maxWidth: 60,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#212529',
+  },
+  compactUnitLabel: {
+    fontSize: 11,
+    color: '#6c757d',
+    fontWeight: '500',
+    minWidth: 15,
+  },
+  compactValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#212529',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  optionButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  compactOptionButton: {
+    backgroundColor: '#e9ecef',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 60,
+  },
+  compactOptionButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  compactOptionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  compactOptionTextActive: {
+    color: 'white',
+  },
+  
+  // Challenge Mode Styles
+  levelSelectButton: {
+    position: 'absolute',
+    bottom: 80, // Moved up to avoid overlapping with PUTT button
+    right: 20,
+    backgroundColor: 'rgba(76, 175, 80, 0.95)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  levelSelectIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  levelSelectText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  levelSelectMenu: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    width: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  levelSelectHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  levelSelectTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  levelSelectClose: {
+    fontSize: 20,
+    color: '#666',
+    padding: 5,
+  },
+  levelItem: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  levelItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelItemNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginRight: 15,
+    width: 30,
+  },
+  levelItemInfo: {
+    flex: 1,
+  },
+  levelItemTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  levelItemDesc: {
+    fontSize: 12,
+    color: '#666',
+  },
+  levelItemLocked: {
+    backgroundColor: '#e9ecef',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#dee2e6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    opacity: 0.6,
+  },
+  levelItemTitleLocked: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#adb5bd',
+    marginBottom: 4,
+  },
+  levelItemDescLocked: {
+    fontSize: 12,
+    color: '#adb5bd',
+  },
+  lockIcon: {
+    fontSize: 20,
+    marginLeft: 'auto',
+  },
+  challengeOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 15,
+    padding: 15,
+    minWidth: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  challengeTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 5,
+  },
+  challengeDesc: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  challengeAttempts: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  challengeSuccess: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -150 }, { translateY: -100 }],
+    width: 300,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+    zIndex: 1500,
+  },
+  challengeSuccessText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  challengeButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  challengeNextButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 20,
-    padding: 24,
-    margin: 20,
-    minWidth: 300,
-    maxWidth: 350,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  challengeBackButton: {
+    backgroundColor: '#666',
+  },
+  challengeNextText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  challengeIntroTooltip: {
+    position: 'absolute',
+    top: '40%',
+    left: 40,
+    right: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    padding: 25,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  challengeIntroText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  challengeIntroClose: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 15,
+  },
+  challengeIntroCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  // Game Mode Controls (next to putt button)
+  gameModeControls: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20, // Position to the right side of screen
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 15,
+    padding: 12,
+    gap: 20,
+  },
+  gameModeControlItem: {
+    alignItems: 'center',
+  },
+  gameModeLabel: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  gameModeButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gameModeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gameModeButtonDouble: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 32,
+  },
+  gameModeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  gameModeValue: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    minWidth: 50,
+    textAlign: 'center',
+  },
+  
+  // Bank and reward styles
+  bankItem: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderColor: '#FFD700',
+    borderWidth: 1,
+  },
+  bankValue: {
+    color: '#FFD700',
+    fontWeight: 'bold',
+  },
+  rewardAnimation: {
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    padding: 30,
+    borderWidth: 3,
+    borderColor: '#FFD700',
+  },
+  rewardEmoji: {
+    fontSize: 60,
+    marginBottom: 10,
+  },
+  rewardText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 5,
+  },
+  rewardSubtext: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  
+  // Level selection enhancements
+  levelSelectScroll: {
+    maxHeight: 400,
+  },
+  challengeSection: {
+    marginBottom: 15,
+  },
+  challengeSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  challengeSectionDivider: {
+    height: 2,
+    backgroundColor: '#e0e0e0',
+    marginBottom: 10,
+  },
+  levelItemCompleted: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#4CAF50',
+  },
+  levelItemNumberContainer: {
+    position: 'relative',
+    marginRight: 15,
+  },
+  levelItemCheck: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#4CAF50',
+    color: 'white',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 20,
+  },
+  levelItemName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  levelItemDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  levelItemReward: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelItemRewardText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  levelItemNumberLocked: {
+    color: '#adb5bd',
+  },
+  levelCheckmark: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    fontSize: 16,
+    color: '#4CAF50',
+  },
+  levelReward: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  // Mobile-specific styles
+  mobileGameControls: {
+    position: 'absolute',
+    bottom: 100, // Above putt button (which is at bottom: 20)
+    left: 10, // Move to left side to avoid covering challenges button
+    flexDirection: 'column',
+    gap: 4,
+    zIndex: 10, // Ensure they're above other elements
+  },
+  mobileControlGroup: {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 8,
+    padding: 6,
+    alignItems: 'center',
+    minWidth: 150,
+  },
+  mobileControlLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 3,
+  },
+  mobileButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  mobileControlButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  mobileControlButtonText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  mobileControlValue: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    minWidth: 30,
+    textAlign: 'center',
+    marginHorizontal: 3,
+  },
+  mobileChallengeHeader: {
+    position: 'absolute',
+    top: 80,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 8,
+    padding: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mobileChallengeTitle: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  mobileExitButton: {
+    backgroundColor: '#ff4444',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  mobileExitText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  bankDetailsContainer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 5,
+  },
+  bankBalanceText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 5,
+  },
+  bankSubText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  quickAdjustButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  quickAdjustText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  puttButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
   },
-  modalHeader: {
+  modeSelectorButton: {
+    backgroundColor: '#45a049',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(0,0,0,0.1)',
+  },
+  modeSelectorText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modeIndicator: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+  },
+  modeIndicatorText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  // Detailed stats popup styles
+  detailedResultPopup: {
+    minWidth: 250,
+    maxWidth: 350,
+  },
+  resultHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
+  resultStats: {
+    paddingHorizontal: 15,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  statLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statValue: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  dismissButton: {
+    marginTop: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 15,
+    alignSelf: 'center',
+  },
+  dismissButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  // Mini map styles
+  miniMapContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 10,
+    width: 150,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    borderRadius: 10,
+    padding: 5,
+    zIndex: 100,
+  },
+  miniMapHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    marginBottom: 5,
   },
-  modalTitle: {
-    fontSize: 18,
+  miniMapTitle: {
+    color: '#fff',
+    fontSize: 10,
     fontWeight: 'bold',
-    color: '#333',
   },
-  closeButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f0f0f0',
+  miniMapClose: {
+    padding: 2,
+  },
+  miniMapCloseText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  miniMapCanvas: {
+    width: 140,
+    height: 100,
+    backgroundColor: '#1a4d2e',
+    borderRadius: 5,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  miniMapPath: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
+  miniMapDot: {
+    position: 'absolute',
+    width: 3,
+    height: 3,
+    backgroundColor: '#ffff00',
+    borderRadius: 1.5,
+  },
+  miniMapBall: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    backgroundColor: '#fff',
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  miniMapHole: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    backgroundColor: '#000',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  miniMapScale: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  miniMapToggle: {
+    position: 'absolute',
+    top: 60,
+    right: 10,
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 100,
   },
-  closeButtonText: {
+  miniMapToggleText: {
     fontSize: 20,
-    color: '#666',
-    fontWeight: 'bold',
-  },
-  modalSection: {
-    marginBottom: 20,
-  },
-  sectionTitleModal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 12,
-  },
-  modalControlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  modalButton: {
-    flex: 1,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  modalButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#333',
-  },
-  modalValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333333',
-    minWidth: 80,
-    textAlign: 'center',
   },
 });

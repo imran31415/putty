@@ -1,3 +1,6 @@
+// Mode transition threshold
+export const PUTT_MODE_THRESHOLD = 10; // Switch to putt mode when within 10 yards
+
 // Physics constants for swing mode
 export const SWING_CONSTANTS = {
   // Environmental
@@ -11,9 +14,9 @@ export const SWING_CONSTANTS = {
   BALL_AREA: Math.PI * Math.pow(0.021335, 2), // m² cross-sectional area
   
   // Aerodynamic coefficients
-  DRAG_COEFFICIENT: 0.25, // Dimpled golf ball
-  LIFT_COEFFICIENT_BASE: 0.15, // Base lift from spin
-  MAGNUS_COEFFICIENT: 0.00004, // Magnus effect strength
+  DRAG_COEFFICIENT: 0.28, // Standard drag coefficient for golf ball
+  LIFT_COEFFICIENT_BASE: 0.18, // Realistic lift for golf ball
+  MAGNUS_COEFFICIENT: 0.00008, // Magnus effect strength for realistic curve
   
   // Conversion factors
   MPH_TO_MS: 0.44704, // mph to m/s

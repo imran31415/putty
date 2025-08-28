@@ -21,8 +21,10 @@ const DEFAULT_CONFIG: RandomizationConfig = {
   minRadius: 2.5,
   maxRadius: 5.0,
   excludeAngles: [
-    { start: -45, end: 45 }, // Don't place spectators directly behind the ball path
-    { start: 165, end: 195 }, // Don't place spectators between ball and hole
+    { start: -20, end: 20 },   // Don't place spectators directly in putting line behind ball
+    { start: 170, end: 190 },  // Don't place spectators directly in putting line in front of hole
+    { start: 85, end: 95 },    // Avoid direct left of putting line
+    { start: 265, end: 275 },  // Avoid direct right of putting line
   ],
 };
 
@@ -78,6 +80,7 @@ export function generateSpectatorConfig(
 
 /**
  * Generate random positions around the hole avoiding certain angles
+ * Specifically avoids the putting line between ball and hole
  */
 function generateRandomPositions(
   count: number,

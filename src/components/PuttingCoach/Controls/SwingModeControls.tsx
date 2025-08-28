@@ -44,7 +44,8 @@ export default function SwingModeControls({
   setStrikeQuality,
 }: SwingModeControlsProps) {
   const clubSpec = CLUB_DATA[selectedClub];
-  const estimatedDistance = Math.round(clubSpec.typicalDistance * (swingPower / 100) * strikeQuality);
+  const adjustedPower = swingPower < 30 ? swingPower * 1.5 : swingPower;
+  const estimatedDistance = Math.round(clubSpec.typicalDistance * (adjustedPower / 100) * strikeQuality);
 
   return (
     <>
@@ -81,13 +82,13 @@ export default function SwingModeControls({
           <View style={styles.compactControlRow}>
             <TouchableOpacity
               style={styles.compactButton}
-              onPress={() => setSwingPower(Math.max(50, swingPower - 10))}
+              onPress={() => setSwingPower(Math.max(20, swingPower - 10))}
             >
               <Text style={styles.compactButtonText}>−−</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.compactButton}
-              onPress={() => setSwingPower(Math.max(50, swingPower - 5))}
+              onPress={() => setSwingPower(Math.max(20, swingPower - 5))}
             >
               <Text style={styles.compactButtonText}>−</Text>
             </TouchableOpacity>
@@ -96,7 +97,7 @@ export default function SwingModeControls({
               value={swingPower.toString()}
               onChangeText={text => {
                 const value = parseInt(text);
-                if (!isNaN(value)) setSwingPower(Math.max(50, Math.min(100, value)));
+                if (!isNaN(value)) setSwingPower(Math.max(20, Math.min(100, value)));
               }}
               keyboardType="numeric"
               returnKeyType="done"
@@ -294,19 +295,22 @@ export default function SwingModeControls({
 
 const styles = StyleSheet.create({
   primarySection: {
+    backgroundColor: '#f8f9fa',
     marginBottom: 8,
+    paddingHorizontal: 8,
   },
   configSection: {
+    backgroundColor: 'white',
     marginBottom: 8,
+    paddingHorizontal: 8,
   },
   sectionHeader: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#e9ecef',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginHorizontal: -12,
     marginBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#dee2e6',
   },
   sectionTitle: {
     fontSize: 16,
@@ -315,6 +319,7 @@ const styles = StyleSheet.create({
   },
   compactControlItem: {
     marginBottom: 12,
+    paddingHorizontal: 0,
   },
   compactControlLabel: {
     fontSize: 13,
@@ -343,15 +348,14 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   compactTextInput: {
-    flex: 1,
-    maxWidth: 60,
+    width: 50,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 4,
-    marginHorizontal: 2,
+    marginHorizontal: 4,
     fontSize: 13,
     textAlign: 'center',
   },

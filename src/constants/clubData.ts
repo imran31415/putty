@@ -18,9 +18,9 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: 'DR',
     loft: 10.5,
     typicalDistance: 240,
-    maxClubSpeed: 95,
-    smashFactor: 1.48,
-    defaultSpinRate: 2500,
+    maxClubSpeed: 125, // Increased for proper distance (was 113)
+    smashFactor: 1.49, // Tour average smash factor
+    defaultSpinRate: 2200, // Lower spin for more distance
     attackAngleOptimal: 3.0, // Hit up
     color: '#FF6B6B',
   },
@@ -29,8 +29,8 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: '3W',
     loft: 15,
     typicalDistance: 215,
-    maxClubSpeed: 90,
-    smashFactor: 1.45,
+    maxClubSpeed: 107, // Tour 3-wood speed
+    smashFactor: 1.46,
     defaultSpinRate: 3500,
     attackAngleOptimal: 1.0,
     color: '#FFA06B',
@@ -40,8 +40,8 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: '5i',
     loft: 27,
     typicalDistance: 170,
-    maxClubSpeed: 80,
-    smashFactor: 1.38,
+    maxClubSpeed: 94, // Tour 5-iron speed
+    smashFactor: 1.36, // Tour iron smash factor
     defaultSpinRate: 5000,
     attackAngleOptimal: -2.0, // Hit down
     color: '#4ECDC4',
@@ -51,7 +51,7 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: '7i',
     loft: 34,
     typicalDistance: 150,
-    maxClubSpeed: 75,
+    maxClubSpeed: 87, // Tour 7-iron speed
     smashFactor: 1.35,
     defaultSpinRate: 6500,
     attackAngleOptimal: -3.0,
@@ -62,8 +62,8 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: '9i',
     loft: 42,
     typicalDistance: 130,
-    maxClubSpeed: 70,
-    smashFactor: 1.32,
+    maxClubSpeed: 80, // Tour 9-iron speed
+    smashFactor: 1.33,
     defaultSpinRate: 8000,
     attackAngleOptimal: -4.0,
     color: '#96CEB4',
@@ -73,8 +73,8 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: 'PW',
     loft: 46,
     typicalDistance: 110,
-    maxClubSpeed: 65,
-    smashFactor: 1.30,
+    maxClubSpeed: 76, // Tour PW speed
+    smashFactor: 1.31,
     defaultSpinRate: 9000,
     attackAngleOptimal: -4.5,
     color: '#DDA0DD',
@@ -84,8 +84,8 @@ export const CLUB_DATA: Record<ClubType, ClubSpec> = {
     shortName: 'SW',
     loft: 56,
     typicalDistance: 80,
-    maxClubSpeed: 60,
-    smashFactor: 1.25,
+    maxClubSpeed: 71, // Tour SW speed
+    smashFactor: 1.26,
     defaultSpinRate: 10000,
     attackAngleOptimal: -5.0,
     color: '#FFB347',
