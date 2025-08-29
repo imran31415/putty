@@ -1156,73 +1156,73 @@ export default function ExpoGL3DView({
         
         // Calculate animation positions based on frame and type
         let bodyRotation = 0;
-        let armRotation = Math.PI / 3; // Default arm angle
+        let armRotation = 0; // Default arms forward
         let clubRotation = 0;
         let hipRotation = 0;
         let shoulderRotation = 0;
         let legBend = 0;
         
-        // Animation calculations (adjusted for back view)
+        // Animation calculations (adjusted for north-south swing toward hole)
         if (animType === 'swing') {
           const progress = animFrame / 20; // 20 frames for full swing
           
           if (progress < 0.3) {
-            // Backswing (club goes to the right from back view)
+            // Backswing (club goes up and back toward north)
             const backswingProg = progress / 0.3;
-            bodyRotation = backswingProg * Math.PI / 6; // Rotate body right
-            armRotation = Math.PI / 3 - backswingProg * Math.PI / 2; // Arms go up and back
-            clubRotation = -backswingProg * Math.PI * 0.8; // Club goes way back
-            hipRotation = backswingProg * Math.PI / 8;
-            shoulderRotation = backswingProg * Math.PI / 4;
+            bodyRotation = backswingProg * Math.PI / 8; // Slight body turn (reversed)
+            armRotation = backswingProg * Math.PI / 3; // Arms rotate back (reversed)
+            clubRotation = backswingProg * Math.PI * 0.8; // Club goes way back (reversed)
+            hipRotation = backswingProg * Math.PI / 12;
+            shoulderRotation = backswingProg * Math.PI / 6;
           } else if (progress < 0.4) {
             // Top of backswing (pause)
-            bodyRotation = Math.PI / 6;
-            armRotation = -Math.PI / 6;
-            clubRotation = -Math.PI * 0.8;
-            hipRotation = Math.PI / 8;
-            shoulderRotation = Math.PI / 4;
+            bodyRotation = Math.PI / 8;
+            armRotation = Math.PI / 3;
+            clubRotation = Math.PI * 0.8;
+            hipRotation = Math.PI / 12;
+            shoulderRotation = Math.PI / 6;
           } else if (progress < 0.6) {
-            // Downswing (club swings to the left from back view)
+            // Downswing (club swings forward toward south/hole)
             const downswingProg = (progress - 0.4) / 0.2;
-            bodyRotation = Math.PI / 6 - downswingProg * Math.PI / 3;
-            armRotation = -Math.PI / 6 + downswingProg * Math.PI / 2;
-            clubRotation = -Math.PI * 0.8 + downswingProg * Math.PI * 1.3;
-            hipRotation = Math.PI / 8 - downswingProg * Math.PI / 4;
-            shoulderRotation = Math.PI / 4 - downswingProg * Math.PI / 2;
+            bodyRotation = Math.PI / 8 - downswingProg * Math.PI / 6;
+            armRotation = Math.PI / 3 - downswingProg * Math.PI / 3;
+            clubRotation = Math.PI * 0.8 - downswingProg * Math.PI * 1.3;
+            hipRotation = Math.PI / 12 - downswingProg * Math.PI / 8;
+            shoulderRotation = Math.PI / 6 - downswingProg * Math.PI / 4;
             legBend = downswingProg * 0.1;
           } else if (progress < 0.7) {
-            // Impact
-            bodyRotation = -Math.PI / 8;
-            armRotation = Math.PI / 3;
-            clubRotation = Math.PI * 0.5;
-            hipRotation = -Math.PI / 8;
-            shoulderRotation = -Math.PI / 4;
+            // Impact (club hits ball toward hole)
+            bodyRotation = -Math.PI / 24;
+            armRotation = 0;
+            clubRotation = -Math.PI * 0.5;
+            hipRotation = -Math.PI / 24;
+            shoulderRotation = -Math.PI / 12;
             legBend = 0.1;
           } else {
-            // Follow through (club continues to the left)
+            // Follow through (club continues forward toward hole)
             const followProg = (progress - 0.7) / 0.3;
-            bodyRotation = -Math.PI / 8 - followProg * Math.PI / 6;
-            armRotation = Math.PI / 3 + followProg * Math.PI / 4;
-            clubRotation = Math.PI * 0.5 + followProg * Math.PI * 0.4;
-            hipRotation = -Math.PI / 8 - followProg * Math.PI / 8;
-            shoulderRotation = -Math.PI / 4;
+            bodyRotation = -Math.PI / 24 - followProg * Math.PI / 8;
+            armRotation = -followProg * Math.PI / 4;
+            clubRotation = -Math.PI * 0.5 - followProg * Math.PI * 0.4;
+            hipRotation = -Math.PI / 24 - followProg * Math.PI / 8;
+            shoulderRotation = -Math.PI / 12 - followProg * Math.PI / 6;
             legBend = 0.1 - followProg * 0.1;
           }
         } else if (animType === 'putt') {
           const progress = animFrame / 15; // 15 frames for putting stroke
           
           if (progress < 0.4) {
-            // Backstroke
+            // Backstroke (club goes back toward north)
             const backstrokeProg = progress / 0.4;
-            armRotation = Math.PI / 3 - backstrokeProg * Math.PI / 6;
+            armRotation = -backstrokeProg * Math.PI / 8;
             clubRotation = -backstrokeProg * Math.PI / 8;
-            shoulderRotation = -backstrokeProg * Math.PI / 12;
+            shoulderRotation = -backstrokeProg * Math.PI / 16;
           } else {
-            // Forward stroke
+            // Forward stroke (club goes forward toward south/hole)
             const forwardProg = (progress - 0.4) / 0.6;
-            armRotation = Math.PI / 3 - Math.PI / 6 + forwardProg * Math.PI / 4;
+            armRotation = -Math.PI / 8 + forwardProg * Math.PI / 6;
             clubRotation = -Math.PI / 8 + forwardProg * Math.PI / 4;
-            shoulderRotation = -Math.PI / 12 + forwardProg * Math.PI / 8;
+            shoulderRotation = -Math.PI / 16 + forwardProg * Math.PI / 12;
           }
         }
         
@@ -1368,143 +1368,120 @@ export default function ExpoGL3DView({
         
         ctx.restore();
         
-        // Arms in golf stance (extended toward ball)
+        // Arms in golf stance (extended forward toward ball)
         // Back arm (left when facing right)
         ctx.save();
         ctx.translate(-8, -15); // Start from back shoulder
         
-        // Rotate arm forward toward ball
-        ctx.rotate(Math.PI / 3 + armRotation);
+        // Rotate arm forward and down toward ball
+        ctx.rotate(Math.PI / 2.5 + armRotation); // More forward angle
         
-        // Upper arm
+        // Upper arm extending forward
         ctx.fillStyle = shirtColor;
         ctx.beginPath();
-        ctx.ellipse(0, 10, 5, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(12, 0, 12, 5, 0, 0, Math.PI * 2); // Horizontal ellipse
         ctx.fill();
         
         // Elbow
         ctx.fillStyle = skinColor;
         ctx.beginPath();
-        ctx.arc(0, 22, 4, 0, Math.PI * 2);
+        ctx.arc(24, 0, 4, 0, Math.PI * 2);
         ctx.fill();
         
-        // Forearm extending down to club
+        // Forearm extending to grip
         ctx.beginPath();
-        ctx.ellipse(0, 35, 4, 13, 0, 0, Math.PI * 2);
+        ctx.ellipse(36, 2, 12, 4, 0.1, 0, Math.PI * 2); // Slight angle down
         ctx.fill();
         
         // Hand gripping club
         ctx.beginPath();
-        ctx.arc(0, 48, 5, 0, Math.PI * 2);
+        ctx.arc(48, 3, 5, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Draw club FROM THE HANDS in this same coordinate system
+        const isPutter = !avatarState.clubType || avatarState.clubType === 'putter';
+        const isWood = avatarState.clubType && (avatarState.clubType.includes('wood') || avatarState.clubType === 'driver');
+        
+        ctx.save();
+        ctx.translate(48, 3); // Move to hand position
+        ctx.rotate(Math.PI + Math.PI / 1.8 + clubRotation); // Rotate 180 degrees + downward angle
+        
+        // Club grip at hands
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(-3, -10, 6, 20);
+        
+        // Club shaft extending down
+        ctx.strokeStyle = '#444444';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, 10);
+        ctx.lineTo(0, 90);
+        ctx.stroke();
+        
+        // Club head at bottom - rotated to point face down and right
+        if (isPutter) {
+          ctx.fillStyle = '#888888';
+          // Rotate the putter head so face points down and right
+          ctx.save();
+          ctx.translate(0, 88);
+          ctx.rotate(Math.PI / 6); // 30 degrees rotation
+          ctx.fillRect(-10, -3, 20, 6);
+          ctx.restore();
+        } else if (isWood) {
+          ctx.fillStyle = '#2a2a2a';
+          // Rotate the wood head so face points down and right
+          ctx.save();
+          ctx.translate(0, 90);
+          ctx.rotate(Math.PI / 6); // 30 degrees rotation
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = '#999999';
+          // Rotate the iron head so face points down and right
+          ctx.save();
+          ctx.translate(0, 88);
+          ctx.rotate(Math.PI / 6); // 30 degrees rotation
+          ctx.fillRect(-8, -3, 16, 6);
+          ctx.restore();
+        }
+        ctx.restore();
+        
         ctx.restore();
         
         // Front arm (right when facing right)
         ctx.save();
-        ctx.translate(8, -15); // Start from front shoulder
+        ctx.translate(6, -15); // Start from front shoulder
         
-        // Rotate arm forward toward ball
-        ctx.rotate(Math.PI / 3 + armRotation * 0.8);
+        // Rotate arm forward toward ball (slightly less than back arm for overlap)
+        ctx.rotate(Math.PI / 2.8 + armRotation * 0.8);
         
-        // Upper arm
+        // Upper arm extending forward
         ctx.fillStyle = shirtColor;
         ctx.beginPath();
-        ctx.ellipse(0, 10, 5, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(12, 0, 12, 5, 0, 0, Math.PI * 2); // Horizontal ellipse
         ctx.fill();
         
         // Elbow
         ctx.fillStyle = skinColor;
         ctx.beginPath();
-        ctx.arc(0, 22, 4, 0, Math.PI * 2);
+        ctx.arc(24, 0, 4, 0, Math.PI * 2);
         ctx.fill();
         
-        // Forearm extending down to club
+        // Forearm extending to grip
         ctx.beginPath();
-        ctx.ellipse(0, 35, 4, 13, 0, 0, Math.PI * 2);
+        ctx.ellipse(35, 2, 11, 4, 0.1, 0, Math.PI * 2);
         ctx.fill();
         
         // Hand gripping club (overlapping grip)
         ctx.beginPath();
-        ctx.arc(0, 48, 5, 0, Math.PI * 2);
+        ctx.arc(45, 3, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         
         ctx.restore(); // End shoulders
         ctx.restore(); // End hips
-        
-        // Draw club (extending from hands toward ball)
-        const isPutter = !avatarState.clubType || avatarState.clubType === 'putter';
-        const isWood = avatarState.clubType && (avatarState.clubType.includes('wood') || avatarState.clubType === 'driver');
-        
-        ctx.save();
-        ctx.translate(128, 40); // Match body position
-        ctx.rotate(bodyRotation); // Follow body rotation
-        ctx.translate(0, 100); // To torso level
-        ctx.rotate(hipRotation);
-        ctx.rotate(shoulderRotation);
-        
-        // Position club at hands extending toward ball (to the right)
-        ctx.translate(12, 15); // Forward from body to hand position
-        ctx.rotate(Math.PI / 3 + armRotation * 0.5); // Angle down toward ball
-        ctx.rotate(clubRotation); // Additional club rotation for swing
-        
-        // Club shaft (pointing down and forward)
-        ctx.strokeStyle = clubColor;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, 85); // Club length
-        ctx.stroke();
-        
-        // Club grip at top
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(-3, 0, 6, 25);
-        
-        // Add grip texture
-        ctx.strokeStyle = '#6B4423';
-        ctx.lineWidth = 0.5;
-        for(let i = 5; i < 20; i += 3) {
-          ctx.beginPath();
-          ctx.moveTo(-3, i);
-          ctx.lineTo(3, i);
-          ctx.stroke();
-        }
-        
-        // Club head at bottom
-        ctx.translate(0, 85); // To club head position
-        if (isPutter) {
-          ctx.fillStyle = '#888888';
-          ctx.fillRect(-10, -2, 20, 6);
-          // Putter face
-          ctx.strokeStyle = '#666666';
-          ctx.lineWidth = 0.5;
-          for (let i = 0; i < 3; i++) {
-            ctx.beginPath();
-            ctx.moveTo(-8 + i * 6, 0);
-            ctx.lineTo(-8 + i * 6, 4);
-            ctx.stroke();
-          }
-        } else if (isWood) {
-          ctx.fillStyle = '#2a2a2a';
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          // Iron/Wedge
-          ctx.fillStyle = '#999999';
-          ctx.fillRect(-8, -2, 16, 6);
-          // Club face grooves
-          ctx.strokeStyle = '#777777';
-          ctx.lineWidth = 0.5;
-          for (let i = 0; i < 4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(-6 + i * 4, 0);
-            ctx.lineTo(-6 + i * 4, 3);
-            ctx.stroke();
-          }
-        }
-        
-        ctx.restore();
         ctx.restore(); // Back to origin
         
         return new THREE.CanvasTexture(canvas);
@@ -3506,7 +3483,7 @@ export default function ExpoGL3DView({
       animateSwingFrame();
     }
 
-    // Animate ball along trajectory
+    // Animate ball along trajectory - delayed to sync with swing impact
     let currentIndex = 0;
     const animationSpeed = 2; // Points per frame
     const trailPoints: THREE.Vector3[] = [];
@@ -3528,6 +3505,10 @@ export default function ExpoGL3DView({
 
       return new THREE.Vector3(worldX, worldY + 0.08, worldZ + 4); // Start from ball position
     });
+
+    // Delay ball launch to sync with swing impact (around frame 14-15)
+    const impactFrame = 14; // Frame when club hits the ball
+    const frameDelay = impactFrame * 30; // 30ms per frame = 420ms delay
 
     const animateFlight = () => {
       if (currentIndex < worldTrajectory.length) {
@@ -3577,7 +3558,10 @@ export default function ExpoGL3DView({
       }
     };
 
-    animateFlight();
+    // Start ball animation after delay to sync with swing impact
+    setTimeout(() => {
+      animateFlight();
+    }, frameDelay);
   };
 
   // Handle putting/swinging animation
