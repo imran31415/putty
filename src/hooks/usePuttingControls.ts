@@ -97,6 +97,16 @@ export default function usePuttingControls(): UsePuttingControlsReturn {
     console.log('✅ Settings reset complete');
   }, []);
 
+  const handleShot = useCallback(() => {
+    // This will be handled by the game state
+    console.log('🎯 Shot triggered');
+  }, []);
+
+  const resetBall = useCallback(() => {
+    // This will be handled by the game state
+    console.log('🔄 Ball reset');
+  }, []);
+
   return {
     distance,
     holeDistance,
@@ -121,5 +131,7 @@ export default function usePuttingControls(): UsePuttingControlsReturn {
     handleLeftRightSlopeChange,
     handleLeftRightSlopeSet,
     resetSettings,
+    handleShot,
+    resetBall,
   };
 }

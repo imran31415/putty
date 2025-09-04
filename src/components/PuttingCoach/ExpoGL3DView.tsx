@@ -18,6 +18,9 @@ import {
   getPracticeModeSpectatorConfig,
 } from '../../utils/sceneRandomizer';
 import { PUTTING_PHYSICS } from '../../constants/puttingPhysics';
+import { CourseFeatureRenderer } from './CourseFeatures/CourseFeatureRenderer';
+import { SceneryManager } from './Scenery/SceneryManager';
+import { GolfPhysics } from './Physics/GolfPhysics';
 
 interface PuttingData {
   distance: number;
@@ -40,6 +43,11 @@ interface ExpoGL3DViewProps {
   onPuttComplete: (result: PuttingResult | FlightResult) => void;
   currentLevel?: number | null;
   challengeAttempts?: number;
+  // Course data props
+  courseHole?: any | null;
+  currentPin?: any | null;
+  showCourseFeatures?: boolean;
+  swingChallengeProgress?: any | null;
 }
 
 export default function ExpoGL3DView({
@@ -52,6 +60,10 @@ export default function ExpoGL3DView({
   onPuttComplete,
   currentLevel = null,
   challengeAttempts = 0,
+  courseHole = null,
+  currentPin = null,
+  showCourseFeatures = false,
+  swingChallengeProgress = null,
 }: ExpoGL3DViewProps) {
   // v7 - Fixed infinite loop
   const rendererRef = useRef<Renderer | null>(null);
@@ -307,6 +319,66 @@ export default function ExpoGL3DView({
     return () => clearInterval(interval);
   }, [autoRotate]);
 
+  // Handle course features using CourseFeatureRenderer (re-render when ball position changes)
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    
+    const scene = sceneRef.current;
+    
+    if (showCourseFeatures && courseHole) {
+      console.log('🌿 Re-rendering course features for ball progression - hole:', courseHole.number);
+      CourseFeatureRenderer.renderCourseFeatures(scene, courseHole, currentPin, swingChallengeProgress);
+    } else {
+      // Remove course features when not needed
+      CourseFeatureRenderer.removeCourseFeatures(scene);
+    }
+  }, [showCourseFeatures, courseHole, currentPin, swingChallengeProgress]);
+
+  // Update world positioning when ball progresses (ball stays at reference point, world moves)
+  useEffect(() => {
+    if (gameMode === 'swing' && swingChallengeProgress) {
+      const ballProgressionYards = swingChallengeProgress.ballPositionYards || 0;
+      const remainingYards = swingChallengeProgress.remainingYards || 0;
+      const totalHoleYards = ballProgressionYards + remainingYards;
+      
+      // Store current ball progression globally for course features
+      (window as any).currentBallProgressionYards = ballProgressionYards;
+      
+      // CRITICAL FIX: Keep ball at avatar position, move world instead
+      if (ballRef.current) {
+        ballRef.current.position.set(0, 0.08, 4); // Ball stays with avatar
+      }
+      
+      console.log(`🏌️ Ball progression: ${ballProgressionYards}yd, remaining: ${remainingYards}yd`);
+      console.log(`📍 Ball stays at avatar position, world adjusts to show progression`);
+      
+      // Putting green creation now handled by separate putt mode useEffect
+      
+      // Update camera for remaining distance (not total progression)
+      if (cameraRef.current) {
+        if (remainingYards > 100) {
+          // Long approach: High aerial view
+          cameraRef.current.position.set(0, 120, 10);
+          cameraRef.current.lookAt(0, 0, -30);
+          cameraRef.current.fov = 75;
+        } else if (remainingYards > 30) {
+          // Medium approach: Medium height
+          cameraRef.current.position.set(0, 60, 15);
+          cameraRef.current.lookAt(0, 0, -10);
+          cameraRef.current.fov = 60;
+        } else {
+          // Green approach: Putting view
+          cameraRef.current.position.set(0, 20, 8);
+          cameraRef.current.lookAt(0, 0, -5);
+          cameraRef.current.fov = 50;
+        }
+        cameraRef.current.updateProjectionMatrix();
+      }
+    }
+  }, [gameMode, swingChallengeProgress?.ballPositionYards, swingChallengeProgress?.remainingYards]);
+
+  // Removed terrain effects that were causing fragmentation
+
   // NEW APPROACH: Update visual slope indicators only - green geometry NEVER changes
   useEffect(() => {
     // Slope update check - logging removed for cleaner output
@@ -512,116 +584,13 @@ export default function ExpoGL3DView({
     rimLight.position.set(0, 8, -20);
     scene.add(rimLight);
 
-    // Dynamic green size based on hole distance - scales for long putts
-    const createAdaptiveGreen = (holeDistanceFeet: number, isSwingMode: boolean = false) => {
-      // console.log(`🏌️ Creating adaptive green for ${holeDistanceFeet}ft putt`);
-
-      // For swing mode, create a large fairway
-      if (isSwingMode) {
-        const radius = 100; // Large fairway area
-        const segments = 64;
-        const geometry = new THREE.CircleGeometry(radius, segments);
-        return { geometry, radius };
-      }
-
-      // Scale green size based on distance: minimum 8 units, max 40 units
-      // Short putts (8ft): 8 unit radius
-      // Medium putts (50ft): 20 unit radius
-      // Long putts (200ft): 40 unit radius
-      const minRadius = 8;
-      const maxRadius = 40;
-      const scaleFactor = Math.min(maxRadius / minRadius, Math.max(1, holeDistanceFeet / 8));
-      const radius = minRadius * scaleFactor;
-
-      const segments = Math.min(128, Math.max(32, Math.floor(radius * 4))); // More segments for larger greens
-      const geometry = new THREE.CircleGeometry(radius, segments);
-
-      // console.log(`✅ Adaptive green created: ${radius.toFixed(1)} unit radius for ${holeDistanceFeet}ft`);
-      return { geometry, radius };
-    };
-
-    // Create optimized grass texture for putting green - simple and performant
-    const createPremiumGrassTexture = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512; // Reduced resolution for performance
-      canvas.height = 512;
-      const ctx = canvas.getContext('2d')!;
-
-      // Professional golf green base color - bright and vibrant
-      ctx.fillStyle = '#4db84d'; // Brighter, more vibrant green
-      ctx.fillRect(0, 0, 512, 512);
-
-      // Simple mowing pattern stripes
-      const stripeWidth = 32;
-      for (let i = 0; i < 512; i += stripeWidth * 2) {
-        ctx.fillStyle = 'rgba(70, 140, 70, 0.2)';
-        ctx.fillRect(i, 0, stripeWidth, 512);
-      }
-
-      // Add simple grass texture dots
-      for (let i = 0; i < 200; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const brightness = Math.random() * 30 + 20;
-        ctx.fillStyle = `rgba(${brightness}, ${100 + brightness}, ${brightness}, 0.3)`;
-        ctx.fillRect(x, y, 2, 2);
-      }
-
-      return new THREE.CanvasTexture(canvas);
-    };
-
-    // Create fairway texture for swing challenges - longer grass, more variation
-    const createFairwayTexture = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
-      const ctx = canvas.getContext('2d')!;
-
-      // Fairway base color - darker, more natural green
-      ctx.fillStyle = '#3a7d3a';
-      ctx.fillRect(0, 0, 512, 512);
-
-      // Add fairway stripe pattern (wider than green)
-      const stripeWidth = 64;
-      for (let i = 0; i < 512; i += stripeWidth * 2) {
-        ctx.fillStyle = 'rgba(50, 100, 50, 0.25)';
-        ctx.fillRect(i, 0, stripeWidth, 512);
-      }
-
-      // Add more texture variation for fairway
-      for (let i = 0; i < 300; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const size = Math.random() * 3 + 1;
-        const brightness = Math.random() * 40 + 10;
-        ctx.fillStyle = `rgba(${brightness}, ${80 + brightness}, ${brightness}, 0.4)`;
-        ctx.fillRect(x, y, size, size);
-      }
-
-      // Add some lighter patches
-      for (let i = 0; i < 50; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const radius = Math.random() * 20 + 10;
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        gradient.addColorStop(0, 'rgba(100, 150, 100, 0.2)');
-        gradient.addColorStop(1, 'rgba(100, 150, 100, 0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-      }
-
-      return new THREE.CanvasTexture(canvas);
-    };
+    // Clean terrain creation
 
     // Create slope visualization overlay
     const createSlopeOverlay = (slopeUpDown: number, slopeLeftRight: number) => {
-      // console.log('🏞️ Creating slope overlay with values:', { slopeUpDown, slopeLeftRight });
-      // TEMPORARILY DISABLE OVERLAY TO TEST GREEN COLOR
-      // console.log('❌ Overlay disabled for testing');
       return null;
 
       if (Math.abs(slopeUpDown) < 0.1 && Math.abs(slopeLeftRight) < 0.1) {
-        // console.log('❌ No slope overlay - values too small');
         return null; // No overlay for flat greens
       }
 
@@ -688,39 +657,27 @@ export default function ExpoGL3DView({
       return new THREE.CanvasTexture(canvas);
     };
 
-    // Initialize adaptive green that scales with distance
+    // Simple clean terrain - no complex effects to avoid fragmentation
     const isSwingChallenge =
       gameMode === 'swing' || (puttingData.swingHoleYards && puttingData.swingHoleYards > 0);
-    const currentGreenData = createAdaptiveGreen(
-      isSwingChallenge ? (puttingData.swingHoleYards || 100) * 3 : puttingData.holeDistance,
-      isSwingChallenge || false
-    );
-    let currentGreenRadius = currentGreenData.radius;
-
-    // Store green radius globally for trajectory calculations
-    (window as any).currentGreenRadius = currentGreenRadius;
-
-    // Use fairway texture for swing challenges, green texture for putting
-    const grassTexture = isSwingChallenge ? createFairwayTexture() : createPremiumGrassTexture();
-    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(isSwingChallenge ? 8 : 4, isSwingChallenge ? 8 : 4); // More tiling for fairway
-    grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
+    
+    const greenRadius = isSwingChallenge ? 100 : Math.max(8, puttingData.holeDistance / 8);
+    const greenGeometry = new THREE.CircleGeometry(greenRadius, 64);
     const greenMaterial = new THREE.MeshStandardMaterial({
-      map: grassTexture,
-      color: isSwingChallenge ? 0x3a7d3a : 0x4caf50, // Darker green for fairway
+      color: isSwingChallenge ? 0x3a7d3a : 0x4caf50,
       roughness: 0.8,
       metalness: 0.0,
-      side: THREE.DoubleSide,
     });
 
-    let green = new THREE.Mesh(currentGreenData.geometry, greenMaterial);
-    green.rotation.x = -Math.PI / 2; // Rotate to lie flat
+    const green = new THREE.Mesh(greenGeometry, greenMaterial);
+    green.rotation.x = -Math.PI / 2;
     green.position.y = 0;
     green.receiveShadow = true;
-    green.castShadow = false;
-    green.userData.isGreen = true; // Mark for updates
+    green.userData.isGreen = true;
     scene.add(green);
+    
+    // Store green radius globally
+    (window as any).currentGreenRadius = greenRadius;
 
     // Slope overlay removed to prevent white streaks
 
@@ -755,7 +712,6 @@ export default function ExpoGL3DView({
       console.log('🚫 Skipping slope indicators - swing mode active');
     }
 
-    // console.log('✅ Realistic circular green created with slope support:', {
     //   slopeUpDown: puttingData.slopeUpDown,
     //   slopeLeftRight: puttingData.slopeLeftRight,
     // });
@@ -840,7 +796,7 @@ export default function ExpoGL3DView({
         const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
 
         // Stop if velocity is too low or ball is off the green (adaptive boundary)
-        const greenBoundary = currentGreenRadius * 1.2; // Use current green size
+        const greenBoundary = greenRadius * 1.2; // Use current green size
         if (
           currentSpeed < 0.05 ||
           Math.abs(currentPos.x) > greenBoundary ||
@@ -1569,1355 +1525,12 @@ export default function ExpoGL3DView({
       const ballZ = 4; // Ball always starts at Z=4
       const holeZ = ballZ - holeDistanceFeet * worldUnitsPerFoot;
 
-      // console.log(`🎯 HOLE POSITIONING: ${holeDistanceFeet}ft using ${worldUnitsPerFoot} units/ft = Z position ${holeZ.toFixed(1)}`);
       return { x: 0, y: 0.001, z: holeZ };
     };
 
     const createHole = (holeDistanceFeet: number) => {
-      // Skip hole creation - unified flag system handles this
       const holePos = getHolePosition(holeDistanceFeet);
       return holePos;
-
-      /* OLD CODE - DISABLED
-      // Create hole (perfect dark circle on the green)
-      const holeRadius = 0.15; // Visible hole size
-      const holeGeometry = new THREE.CircleGeometry(holeRadius, 32);
-      const holeMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        side: THREE.DoubleSide,
-      });
-      const hole = new THREE.Mesh(holeGeometry, holeMaterial);
-      hole.rotation.x = -Math.PI / 2; // Lie flat on green
-      hole.position.set(holePos.x, holePos.y, holePos.z);
-      hole.userData.isHole = true;
-      scene.add(hole);
-
-      // Create flagstick (positioned IN the hole)
-      const flagstickGeometry = new THREE.CylinderGeometry(0.01, 0.01, 2.5, 8);
-      const flagstickMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-      const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
-      flagstick.position.set(holePos.x, 1.25, holePos.z);
-      flagstick.userData.isHole = true;
-      scene.add(flagstick);
-
-      // Create animated waving flag with simple material
-      const createWavingFlag = () => {
-        const flagWidth = 0.8;
-        const flagHeight = 0.5;
-        const segments = 16; // More segments for smooth waving
-        
-        const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight, segments, 8);
-        
-        // Store original positions for animation
-        const originalPositions = flagGeometry.attributes.position.array.slice();
-        flagGeometry.userData.originalPositions = originalPositions;
-        flagGeometry.userData.time = 0;
-        
-        return flagGeometry;
-      };
-      
-      const flagGeometry = createWavingFlag();
-      
-      // Create California bear flag texture
-      const createCaliforniaBearFlag = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d')!;
-        
-        // White background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, 256, 128);
-        
-        // Red stripe at bottom
-        ctx.fillStyle = '#cc0000';
-        ctx.fillRect(0, 100, 256, 28);
-        
-        // Draw simple bear silhouette
-        ctx.fillStyle = '#8B4513'; // Brown bear
-        ctx.beginPath();
-        // Bear body (simplified oval)
-        ctx.ellipse(128, 60, 40, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Bear head
-        ctx.beginPath();
-        ctx.ellipse(100, 50, 18, 15, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Bear ears
-        ctx.beginPath();
-        ctx.arc(90, 40, 6, 0, Math.PI * 2);
-        ctx.arc(110, 40, 6, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Bear legs (simple rectangles)
-        ctx.fillRect(105, 75, 8, 15);
-        ctx.fillRect(125, 75, 8, 15);
-        ctx.fillRect(140, 75, 8, 15);
-        ctx.fillRect(155, 75, 8, 15);
-        
-        // "CALIFORNIA REPUBLIC" text
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('CALIFORNIA', 128, 25);
-        ctx.fillText('REPUBLIC', 128, 95);
-        
-        // Red star
-        ctx.fillStyle = '#cc0000';
-        const drawStar = (cx: number, cy: number, size: number) => {
-          ctx.beginPath();
-          for (let i = 0; i < 5; i++) {
-            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-            const x = cx + Math.cos(angle) * size;
-            const y = cy + Math.sin(angle) * size;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.closePath();
-          ctx.fill();
-        };
-        drawStar(50, 30, 8);
-        
-        return new THREE.CanvasTexture(canvas);
-      };
-      
-      const californiaFlagTexture = createCaliforniaBearFlag();
-      const flagMaterial = new THREE.MeshBasicMaterial({
-        map: californiaFlagTexture,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.95,
-      });
-      
-      // Add the California flag 
-      const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-      flag.position.set(holePos.x + 0.4, 2, holePos.z);
-      flag.userData.isHole = true;
-      flag.userData.isFlag = true; // Special marker for animation
-      scene.add(flag);
-
-      // Create dynamic flag shadow
-      const createFlagShadow = () => {
-        const shadowGeometry = new THREE.PlaneGeometry(0.8, 0.5, 16, 8); // Same dimensions as flag
-        const shadowMaterial = new THREE.MeshBasicMaterial({
-          color: 0x000000,
-          transparent: true,
-          opacity: 0.3,
-          side: THREE.DoubleSide,
-        });
-        
-        const flagShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
-        
-        // Dynamic shadow positioning based on slope
-        // Base shadow position (sun from upper front-left)
-        let shadowX = holePos.x - 0.3;
-        let shadowZ = holePos.z - 0.8;
-        
-        // Adjust shadow position based on slope to simulate light hitting uneven surface
-        // Left/Right slope affects X shadow position
-        if (puttingData.slopeLeftRight !== 0) {
-          // If green slopes right, shadow moves more left (and vice versa)
-          shadowX -= (puttingData.slopeLeftRight * 0.05); // Subtle effect
-        }
-        
-        // Up/Down slope affects Z shadow position  
-        if (puttingData.slopeUpDown !== 0) {
-          // If green slopes uphill, shadow moves forward (closer to flag base)
-          shadowZ += (puttingData.slopeUpDown * 0.08); // Subtle effect
-        }
-        
-        flagShadow.position.set(shadowX, 0.01, shadowZ);
-        flagShadow.rotation.x = -Math.PI / 2; // Lie flat on ground
-        flagShadow.userData.isHole = true;
-        flagShadow.userData.isFlagShadow = true; // Special marker for shadow animation
-        
-        // Store original positions for shadow animation
-        const originalShadowPositions = shadowGeometry.attributes.position.array.slice();
-        shadowGeometry.userData.originalPositions = originalShadowPositions;
-        
-        scene.add(flagShadow);
-        return flagShadow;
-      };
-      
-      // Only create flag shadow in putt mode
-      if (gameMode !== 'swing') {
-        createFlagShadow();
-      }
-
-      // Use randomized spectator configuration
-      const spectatorConfig = currentLevel 
-        ? getChallengeModeSpectatorConfig(
-            currentLevel, 
-            holeDistanceFeet,
-            challengeAttempts || 0
-          )
-        : getPracticeModeSpectatorConfig();
-      
-      // Create level config from spectator config
-      const levelConfig = {
-        showFemaleRobot: spectatorConfig.showFemaleRobot,
-        showPuttingRobot: spectatorConfig.showPuttingRobot,
-        showCooler: spectatorConfig.showCooler,
-        femaleRobotOffset: spectatorConfig.femaleRobotPosition || { x: 2.0, z: -0.5 },
-        puttingRobotOffset: spectatorConfig.puttingRobotPosition || { x: -2.0, z: -1.0 },
-        coolerOffset: spectatorConfig.coolerPosition || { x: 3.5, z: -2.5 }
-      };
-
-      // Create 2D/pseudo-3D humanoid robot avatar for distance reference
-      const createRobotAvatar = () => {
-        // Only create if enabled for this level
-        if (!levelConfig.showFemaleRobot) return;
-        // Create female robot with cute golf outfit
-        const createRobotTexture = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 128;
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d')!;
-          
-          // Clear background (transparent)
-          ctx.clearRect(0, 0, 128, 256);
-          
-          // Female robot color scheme
-          const primaryColor = '#ff69b4'; // Pink
-          const secondaryColor = '#ff1493'; // Deep pink accents
-          const skinColor = '#fdbcb4'; // Light peach
-          const outfitColor = '#fff'; // White outfit
-          const skirtColor = '#ff69b4'; // Pink skirt
-          
-          // Long hair (back layer)
-          ctx.fillStyle = '#8b4513'; // Brown hair
-          // Left side hair
-          ctx.beginPath();
-          ctx.moveTo(40, 30);
-          ctx.quadraticCurveTo(35, 50, 38, 75);
-          ctx.quadraticCurveTo(40, 85, 45, 90);
-          ctx.lineTo(50, 70);
-          ctx.lineTo(48, 35);
-          ctx.closePath();
-          ctx.fill();
-          // Right side hair
-          ctx.beginPath();
-          ctx.moveTo(88, 30);
-          ctx.quadraticCurveTo(93, 50, 90, 75);
-          ctx.quadraticCurveTo(88, 85, 83, 90);
-          ctx.lineTo(78, 70);
-          ctx.lineTo(80, 35);
-          ctx.closePath();
-          ctx.fill();
-          
-          // Head (rounded, feminine)
-          ctx.fillStyle = skinColor;
-          ctx.beginPath();
-          ctx.arc(64, 45, 23, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#f0a0a0';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          
-          // Hair on top
-          ctx.fillStyle = '#8b4513';
-          ctx.beginPath();
-          ctx.ellipse(64, 28, 24, 12, 0, Math.PI, Math.PI * 2);
-          ctx.fill();
-          
-          // Golf visor
-          ctx.fillStyle = skirtColor; // Pink visor
-          ctx.beginPath();
-          ctx.ellipse(64, 32, 28, 8, 0, Math.PI, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ff1493';
-          ctx.stroke();
-          // Visor brim
-          ctx.fillStyle = '#ff85c8';
-          ctx.beginPath();
-          ctx.ellipse(64, 32, 35, 12, 0, Math.PI * 1.1, Math.PI * 2 - 0.1);
-          ctx.fill();
-          ctx.strokeStyle = '#ff1493';
-          ctx.stroke();
-          // Visor logo
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 6px Arial';
-          ctx.fillText('G', 61, 30);
-          
-          // Eyes (cute style)
-          ctx.fillStyle = '#000';
-          ctx.beginPath();
-          ctx.arc(54, 44, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(74, 44, 3, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Eyelashes
-          ctx.strokeStyle = '#000';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(51, 41);
-          ctx.lineTo(49, 39);
-          ctx.moveTo(57, 41);
-          ctx.lineTo(56, 39);
-          ctx.moveTo(77, 41);
-          ctx.lineTo(79, 39);
-          ctx.moveTo(71, 41);
-          ctx.lineTo(72, 39);
-          ctx.stroke();
-          
-          // Smile with lipstick
-          ctx.strokeStyle = '#ff69b4';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(64, 50, 8, 0.2, Math.PI - 0.2);
-          ctx.stroke();
-          
-          // Golf polo shirt (white with pink trim)
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(35, 70, 58, 45);
-          ctx.strokeStyle = '#ddd';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(35, 70, 58, 45);
-          
-          // Collar
-          ctx.fillStyle = '#f8f8f8';
-          ctx.beginPath();
-          ctx.moveTo(45, 70);
-          ctx.lineTo(64, 75);
-          ctx.lineTo(83, 70);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = skirtColor;
-          ctx.stroke();
-          
-          // Pink buttons
-          ctx.fillStyle = secondaryColor;
-          ctx.beginPath();
-          ctx.arc(64, 85, 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(64, 95, 2, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Golf skirt (pleated, pink)
-          ctx.fillStyle = skirtColor;
-          ctx.beginPath();
-          ctx.moveTo(35, 115);
-          ctx.lineTo(93, 115);
-          ctx.lineTo(88, 150);
-          ctx.lineTo(40, 150);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = '#ff1493';
-          ctx.stroke();
-          
-          // Pleats
-          ctx.strokeStyle = '#ff1493';
-          ctx.lineWidth = 1;
-          for (let i = 0; i < 4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(45 + i * 12, 115);
-            ctx.lineTo(47 + i * 11, 150);
-            ctx.stroke();
-          }
-          
-          // Arms (slender)
-          // Left arm
-          ctx.fillStyle = skinColor;
-          ctx.fillRect(15, 80, 16, 55);
-          ctx.strokeStyle = '#f0a0a0';
-          ctx.strokeRect(15, 80, 16, 55);
-          // Left glove
-          ctx.fillStyle = outfitColor;
-          ctx.beginPath();
-          ctx.arc(23, 140, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          
-          // Right arm (holding putter)
-          ctx.fillStyle = skinColor;
-          ctx.fillRect(97, 80, 16, 55);
-          ctx.strokeRect(97, 80, 16, 55);
-          // Right glove
-          ctx.fillStyle = outfitColor;
-          ctx.beginPath();
-          ctx.arc(105, 140, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          
-          // Putter in right hand
-          ctx.strokeStyle = '#444';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(105, 140);
-          ctx.lineTo(105, 215); // Shaft
-          ctx.stroke();
-          // Putter head
-          ctx.fillStyle = '#666';
-          ctx.fillRect(92, 213, 26, 7);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(92, 213, 26, 7);
-          // Grip (pink)
-          ctx.fillStyle = skirtColor;
-          ctx.fillRect(103, 140, 4, 18);
-          ctx.strokeRect(103, 140, 4, 18);
-          
-          // Legs (with socks)
-          // Left leg
-          ctx.fillStyle = skinColor;
-          ctx.fillRect(43, 150, 16, 50);
-          ctx.strokeRect(43, 150, 16, 50);
-          // Left sock
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(43, 200, 16, 25);
-          ctx.strokeRect(43, 200, 16, 25);
-          // Left shoe
-          ctx.fillStyle = skirtColor;
-          ctx.fillRect(39, 225, 24, 12);
-          ctx.strokeRect(39, 225, 24, 12);
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(42, 228, 18, 3);
-          
-          // Right leg
-          ctx.fillStyle = skinColor;
-          ctx.fillRect(69, 150, 16, 50);
-          ctx.strokeRect(69, 150, 16, 50);
-          // Right sock
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(69, 200, 16, 25);
-          ctx.strokeRect(69, 200, 16, 25);
-          // Right shoe
-          ctx.fillStyle = skirtColor;
-          ctx.fillRect(65, 225, 24, 12);
-          ctx.strokeRect(65, 225, 24, 12);
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(68, 228, 18, 3);
-          
-          // Add some detail lines for pseudo-3D effect
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-          ctx.lineWidth = 1;
-          // Body highlights
-          ctx.beginPath();
-          ctx.moveTo(35, 80);
-          ctx.lineTo(35, 150);
-          ctx.stroke();
-          // Leg highlights
-          ctx.beginPath();
-          ctx.moveTo(43, 165);
-          ctx.lineTo(43, 225);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(71, 165);
-          ctx.lineTo(71, 225);
-          ctx.stroke();
-          
-          return new THREE.CanvasTexture(canvas);
-        };
-        
-        const robotTexture = createRobotTexture();
-        robotTexture.minFilter = THREE.LinearFilter;
-        robotTexture.magFilter = THREE.LinearFilter;
-        
-        // Create sprite (always faces camera for 2D effect)
-        const robotMaterial = new THREE.SpriteMaterial({
-          map: robotTexture,
-          transparent: true,
-          depthWrite: false, // Prevent depth issues
-          depthTest: true,
-        });
-        
-        const robot = new THREE.Sprite(robotMaterial);
-        
-        // Calculate robot position based on level config
-        const robotOffsetX = levelConfig.femaleRobotOffset.x;
-        const robotOffsetZ = levelConfig.femaleRobotOffset.z;
-        
-        // Base size of robot (will be scaled based on distance)
-        const baseHeight = 2.0; // 2 units tall (about human height in golf scale)
-        const aspectRatio = 128 / 256; // Width/Height from texture
-        
-        // Position robot near the hole (standing on the ground)
-        robot.position.set(
-          holePos.x + robotOffsetX,
-          baseHeight / 2 + 0.01, // Slightly above ground to prevent z-fighting
-          holePos.z + robotOffsetZ
-        );
-        
-        // Scale robot based on distance for perspective
-        const worldUnitsPerFoot = getWorldUnitsPerFoot(holeDistanceFeet);
-        const scaleFactor = 1.0; // Adjust if needed
-        robot.scale.set(
-          baseHeight * aspectRatio * scaleFactor,
-          baseHeight * scaleFactor,
-          1
-        );
-        
-        robot.userData.isRobot = true;
-        robot.userData.baseHeight = baseHeight;
-        robot.userData.aspectRatio = aspectRatio;
-        robot.renderOrder = 10; // Render above terrain
-        scene.add(robot);
-        
-        // Create robot shadow
-        const createRobotShadow = () => {
-          const shadowGeometry = new THREE.PlaneGeometry(
-            baseHeight * aspectRatio * 0.8, // Slightly smaller than robot width
-            baseHeight * 0.3 // Elliptical shadow
-          );
-          const shadowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide,
-          });
-          
-          const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
-          shadow.rotation.x = -Math.PI / 2; // Lay flat on ground
-          shadow.position.set(
-            holePos.x + robotOffsetX,
-            0.005, // Just above the green surface
-            holePos.z + robotOffsetZ + 0.1 // Slightly offset for perspective
-          );
-          
-          shadow.userData.isRobotShadow = true;
-          scene.add(shadow);
-          
-          // Store reference for updates
-          (window as any).robotShadow = shadow;
-        };
-        
-        createRobotShadow();
-        
-        // Store reference for updates
-        (window as any).robotAvatar = robot;
-        
-        return robot;
-      };
-      
-      createRobotAvatar();
-      
-      // Create second robot in putting stance (side view)
-      const createPuttingRobot = () => {
-        // Only create if enabled for this level
-        if (!levelConfig.showPuttingRobot) return;
-        // Create side-view putting robot texture
-        const createPuttingRobotTexture = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256; // Wider for side view
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d')!;
-          
-          // Clear background
-          ctx.clearRect(0, 0, 256, 256);
-          
-          // Black male golfer color scheme
-          const skinColor = '#8b4513'; // Brown skin
-          const outfitColor = '#000'; // Black outfit
-          const accentColor = '#ffd700'; // Gold accents
-          const shirtColor = '#1e3a8a'; // Navy blue polo
-          
-          // Transform for side view - robot facing left
-          ctx.save();
-          ctx.translate(128, 0);
-          
-          // Back leg (golf pants)
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(-5, 140, 15, 70);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(-5, 140, 15, 70);
-          // Gold stripe on pants
-          ctx.strokeStyle = accentColor;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(-4, 145);
-          ctx.lineTo(-4, 200);
-          ctx.stroke();
-          
-          // Back foot (black golf shoe)
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(-10, 210, 25, 12);
-          ctx.strokeRect(-10, 210, 25, 12);
-          // Gold swoosh on shoe
-          ctx.strokeStyle = accentColor;
-          ctx.beginPath();
-          ctx.moveTo(-5, 215);
-          ctx.lineTo(5, 218);
-          ctx.stroke();
-          
-          // Body (leaning forward for putting stance)
-          ctx.save();
-          ctx.translate(0, 60);
-          ctx.rotate(Math.PI / 12); // Slight forward lean
-          // Navy polo shirt
-          ctx.fillStyle = shirtColor;
-          ctx.fillRect(-25, 0, 50, 70);
-          ctx.strokeStyle = '#0a1e4a';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-25, 0, 50, 70);
-          
-          // Collar
-          ctx.fillStyle = shirtColor;
-          ctx.beginPath();
-          ctx.moveTo(-25, 0);
-          ctx.lineTo(-15, 5);
-          ctx.lineTo(15, 5);
-          ctx.lineTo(25, 0);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = accentColor;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          
-          // Gold logo/emblem on chest
-          ctx.fillStyle = accentColor;
-          ctx.beginPath();
-          ctx.arc(-10, 20, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = shirtColor;
-          ctx.font = '8px Arial';
-          ctx.fillText('G', -13, 23);
-          ctx.restore();
-          
-          // Head (looking down at ball)
-          ctx.save();
-          ctx.translate(0, 40);
-          ctx.rotate(Math.PI / 8); // Looking down
-          ctx.fillStyle = skinColor;
-          ctx.beginPath();
-          ctx.arc(0, 0, 20, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#6b3410';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          
-          // Short hair (fade style)
-          ctx.fillStyle = '#000';
-          ctx.beginPath();
-          ctx.arc(0, -10, 18, Math.PI, Math.PI * 2);
-          ctx.fill();
-          
-          // Baseball cap with logo
-          ctx.fillStyle = outfitColor;
-          ctx.beginPath();
-          ctx.ellipse(0, -8, 22, 15, 0, Math.PI, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#333';
-          ctx.stroke();
-          // Cap brim
-          ctx.fillStyle = '#111';
-          ctx.beginPath();
-          ctx.ellipse(-5, -5, 25, 10, -0.2, Math.PI * 0.8, Math.PI * 2.2);
-          ctx.fill();
-          // Gold logo
-          ctx.fillStyle = accentColor;
-          ctx.font = 'bold 8px Arial';
-          ctx.fillText('TW', -8, -10);
-          
-          // Eye (side view)
-          ctx.fillStyle = '#000';
-          ctx.beginPath();
-          ctx.arc(-8, 3, 3, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Cool sunglasses
-          ctx.strokeStyle = '#000';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(-15, 2);
-          ctx.lineTo(-2, 2);
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.fillRect(-14, -1, 12, 8);
-          
-          ctx.restore();
-          
-          // Front leg (golf pants)
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(-20, 140, 15, 40); // Upper leg
-          ctx.strokeRect(-20, 140, 15, 40);
-          // Gold stripe
-          ctx.strokeStyle = accentColor;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(-19, 145);
-          ctx.lineTo(-19, 175);
-          ctx.stroke();
-          
-          // Bent knee
-          ctx.fillStyle = outfitColor;
-          ctx.beginPath();
-          ctx.arc(-12, 180, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          
-          // Lower front leg (angled)
-          ctx.save();
-          ctx.translate(-12, 180);
-          ctx.rotate(-Math.PI / 6);
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(-7, 0, 14, 35);
-          ctx.strokeRect(-7, 0, 14, 35);
-          ctx.restore();
-          
-          // Front shoe
-          ctx.fillStyle = outfitColor;
-          ctx.fillRect(-35, 210, 25, 12);
-          ctx.strokeRect(-35, 210, 25, 12);
-          // Gold swoosh
-          ctx.strokeStyle = accentColor;
-          ctx.beginPath();
-          ctx.moveTo(-30, 215);
-          ctx.lineTo(-20, 218);
-          ctx.stroke();
-          
-          // Arms with golf gloves
-          // Back arm
-          ctx.fillStyle = skinColor;
-          ctx.save();
-          ctx.translate(5, 75);
-          ctx.rotate(Math.PI / 3);
-          ctx.fillRect(-6, 0, 12, 35);
-          ctx.strokeStyle = '#6b3410';
-          ctx.strokeRect(-6, 0, 12, 35);
-          ctx.restore();
-          
-          // Front arm
-          ctx.fillStyle = skinColor;
-          ctx.save();
-          ctx.translate(-15, 75);
-          ctx.rotate(Math.PI / 3);
-          ctx.fillRect(-7, 0, 14, 35);
-          ctx.strokeRect(-7, 0, 14, 35);
-          ctx.restore();
-          
-          // Golf gloves (white with gold)
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(-30, 115, 6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = accentColor;
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(-22, 112, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          
-          // Putter (vertical, ready to putt)
-          ctx.strokeStyle = '#444';
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          ctx.moveTo(-26, 115);
-          ctx.lineTo(-26, 200); // Long shaft
-          ctx.stroke();
-          
-          // Putter grip
-          ctx.fillStyle = '#8B4513';
-          ctx.fillRect(-29, 115, 6, 25);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(-29, 115, 6, 25);
-          
-          // Putter head
-          ctx.fillStyle = '#666';
-          ctx.fillRect(-40, 196, 30, 10);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-40, 196, 30, 10);
-          // Add putter face lines
-          ctx.strokeStyle = '#999';
-          ctx.lineWidth = 1;
-          for (let i = 0; i < 4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(-38 + i * 7, 198);
-            ctx.lineTo(-38 + i * 7, 204);
-            ctx.stroke();
-          }
-          
-          ctx.restore();
-          
-          return new THREE.CanvasTexture(canvas);
-        };
-        
-        const puttingRobotTexture = createPuttingRobotTexture();
-        puttingRobotTexture.minFilter = THREE.LinearFilter;
-        puttingRobotTexture.magFilter = THREE.LinearFilter;
-        
-        const puttingRobotMaterial = new THREE.SpriteMaterial({
-          map: puttingRobotTexture,
-          transparent: true,
-          depthWrite: false,
-          depthTest: true,
-        });
-        
-        const puttingRobot = new THREE.Sprite(puttingRobotMaterial);
-        
-        // Position based on level config
-        const puttingRobotOffsetX = levelConfig.puttingRobotOffset.x;
-        const puttingRobotOffsetZ = levelConfig.puttingRobotOffset.z;
-        
-        puttingRobot.position.set(
-          holePos.x + puttingRobotOffsetX,
-          1.0, // Half height since bent over
-          holePos.z + puttingRobotOffsetZ
-        );
-        
-        puttingRobot.scale.set(2, 2, 1); // Make it visible
-        puttingRobot.userData.isPuttingRobot = true;
-        puttingRobot.renderOrder = 10; // Render above terrain
-        scene.add(puttingRobot);
-        
-        // Add shadow for putting robot
-        const puttingRobotShadow = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.5, 2.5),
-          new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide,
-          })
-        );
-        puttingRobotShadow.rotation.x = -Math.PI / 2;
-        puttingRobotShadow.position.set(
-          holePos.x + puttingRobotOffsetX,
-          0.005,
-          holePos.z + puttingRobotOffsetZ + 0.2
-        );
-        puttingRobotShadow.userData.isPuttingRobotAccessory = true;
-        scene.add(puttingRobotShadow);
-        
-        // Store references
-        (window as any).puttingRobot = puttingRobot;
-        (window as any).puttingRobotShadow = puttingRobotShadow;
-      };
-      
-      createPuttingRobot();
-      
-      // Create cooler with beers and passed out frat robot
-      const createCoolerAndFratRobot = () => {
-        // Only create if enabled for this level
-        if (!levelConfig.showCooler) return;
-        // Create cooler sprite
-        const createCoolerTexture = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256;
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d')!;
-          
-          ctx.clearRect(0, 0, 256, 256);
-          
-          // Cooler body (red with white lid)
-          ctx.fillStyle = '#c41e3a'; // Red cooler
-          ctx.fillRect(64, 140, 128, 80);
-          
-          // White lid
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(64, 120, 128, 25);
-          
-          // Lid handle
-          ctx.strokeStyle = '#666666';
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(110, 115);
-          ctx.lineTo(146, 115);
-          ctx.stroke();
-          
-          // Cooler details
-          ctx.strokeStyle = '#8b0020';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(64, 140, 128, 80);
-          
-          // Ice cubes visible at top
-          ctx.fillStyle = 'rgba(200, 230, 255, 0.9)';
-          for (let i = 0; i < 6; i++) {
-            const x = 75 + (i % 3) * 35;
-            const y = 125 + Math.floor(i / 3) * 12;
-            ctx.fillRect(x, y, 25, 10);
-            ctx.strokeStyle = '#aaccff';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x, y, 25, 10);
-          }
-          
-          // Blue beer bottles sticking out
-          ctx.fillStyle = '#1e90ff'; // Blue bottles
-          // First bottle
-          ctx.fillRect(85, 100, 15, 35);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(85, 95, 15, 8); // Cap
-          // Second bottle
-          ctx.fillStyle = '#1e90ff';
-          ctx.fillRect(115, 105, 15, 30);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(115, 100, 15, 8); // Cap
-          // Third bottle
-          ctx.fillStyle = '#1e90ff';
-          ctx.fillRect(145, 102, 15, 33);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(145, 97, 15, 8); // Cap
-          
-          // Label on cooler
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 16px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('PARTY', 128, 180);
-          
-          return new THREE.CanvasTexture(canvas);
-        };
-        
-        const coolerTexture = createCoolerTexture();
-        const coolerMaterial = new THREE.SpriteMaterial({
-          map: coolerTexture,
-          transparent: true,
-          depthWrite: false,
-          depthTest: true,
-        });
-        
-        const cooler = new THREE.Sprite(coolerMaterial);
-        const coolerOffsetX = levelConfig.coolerOffset?.x || 3.5; // Use randomized position
-        const coolerOffsetZ = levelConfig.coolerOffset?.z || -2.5; // Use randomized position
-        
-        cooler.position.set(
-          holePos.x + coolerOffsetX,
-          0.8,
-          holePos.z + coolerOffsetZ
-        );
-        cooler.scale.set(1.5, 1.5, 1);
-        cooler.userData.isCooler = true;
-        cooler.renderOrder = 9;
-        scene.add(cooler);
-        
-        // Create passed out frat robot
-        const createFratRobotTexture = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256;
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d')!;
-          
-          ctx.clearRect(0, 0, 256, 256);
-          
-          // Robot laying on ground (horizontal)
-          ctx.save();
-          ctx.translate(128, 180);
-          ctx.rotate(-Math.PI / 2); // Laying down
-          
-          // Backwards baseball cap (on side)
-          ctx.fillStyle = '#ff6b6b'; // Red cap
-          ctx.beginPath();
-          ctx.arc(0, -35, 20, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 10px Arial';
-          ctx.fillText('ΦΔΘ', -12, -32); // Frat letters
-          
-          // Head with sunglasses
-          ctx.fillStyle = '#ffcc99';
-          ctx.beginPath();
-          ctx.arc(0, -10, 18, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Sunglasses (crooked)
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(-15, -15, 30, 8);
-          
-          // Body (tank top with frat letters)
-          ctx.fillStyle = '#ffffff'; // White tank
-          ctx.fillRect(-20, 10, 40, 50);
-          ctx.fillStyle = '#ff6b6b';
-          ctx.font = 'bold 14px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('PARTY', 0, 35);
-          ctx.fillText('BRO', 0, 50);
-          
-          // Shorts
-          ctx.fillStyle = '#4169e1'; // Blue shorts
-          ctx.fillRect(-20, 60, 40, 30);
-          
-          // Arms spread out
-          ctx.fillStyle = '#ffcc99';
-          // Left arm
-          ctx.fillRect(-50, 15, 30, 12);
-          // Right arm  
-          ctx.fillRect(20, 15, 30, 12);
-          
-          // Legs spread
-          ctx.fillStyle = '#ffcc99';
-          // Left leg
-          ctx.fillRect(-15, 90, 12, 40);
-          // Right leg
-          ctx.fillRect(3, 90, 12, 40);
-          
-          // Flip flops
-          ctx.fillStyle = '#ff1493'; // Pink flip flops
-          ctx.fillRect(-18, 130, 15, 8);
-          ctx.fillRect(0, 130, 15, 8);
-          
-          ctx.restore();
-          
-          // Putter laying across robot
-          ctx.strokeStyle = '#666666';
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(40, 160);
-          ctx.lineTo(200, 200);
-          ctx.stroke();
-          
-          // Putter head
-          ctx.fillStyle = '#888888';
-          ctx.fillRect(35, 155, 15, 10);
-          
-          // Red solo cup next to him
-          ctx.fillStyle = '#ff0000';
-          ctx.beginPath();
-          ctx.moveTo(210, 180);
-          ctx.lineTo(205, 210);
-          ctx.lineTo(225, 210);
-          ctx.lineTo(220, 180);
-          ctx.closePath();
-          ctx.fill();
-          
-          return new THREE.CanvasTexture(canvas);
-        };
-        
-        const fratRobotTexture = createFratRobotTexture();
-        const fratRobotMaterial = new THREE.SpriteMaterial({
-          map: fratRobotTexture,
-          transparent: true,
-          depthWrite: false,
-          depthTest: true,
-        });
-        
-        const fratRobot = new THREE.Sprite(fratRobotMaterial);
-        fratRobot.position.set(
-          holePos.x + coolerOffsetX - 0.5, // Next to cooler
-          0.5, // On ground
-          holePos.z + coolerOffsetZ + 0.5
-        );
-        fratRobot.scale.set(2.5, 2.5, 1); // Larger since laying down
-        fratRobot.userData.isFratRobot = true;
-        fratRobot.renderOrder = 8;
-        scene.add(fratRobot);
-        
-        // Add shadow for frat robot
-        const fratRobotShadow = new THREE.Mesh(
-          new THREE.PlaneGeometry(3, 1.5),
-          new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.2,
-            side: THREE.DoubleSide,
-          })
-        );
-        fratRobotShadow.rotation.x = -Math.PI / 2;
-        fratRobotShadow.position.set(
-          fratRobot.position.x,
-          0.002,
-          fratRobot.position.z
-        );
-        fratRobotShadow.userData.isFratRobot = true;
-        scene.add(fratRobotShadow);
-        
-        // Store references
-        (window as any).cooler = cooler;
-        (window as any).fratRobot = fratRobot;
-        (window as any).fratRobotShadow = fratRobotShadow;
-      };
-      
-      createCoolerAndFratRobot();
-      
-      // Create third robot over the actual playing ball (facing toward ball)
-      const createPlayerRobot = (clubType?: string) => {
-        // Remove existing player robot if any
-        const existingRobot = scene.children.find(child => child.userData && child.userData.isPlayerRobot);
-        if (existingRobot) {
-          scene.remove(existingRobot);
-        }
-        const existingShadow = scene.children.find(child => child.userData && child.userData.isPlayerRobotShadow);
-        if (existingShadow) {
-          scene.remove(existingShadow);
-        }
-        
-        // Create robot in side view facing right toward the ball
-        const createPlayerRobotTexture = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256;
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d')!;
-          
-          // Clear background
-          ctx.clearRect(0, 0, 256, 256);
-          
-          const primaryColor = '#4a90e2';
-          const secondaryColor = '#e84a5f';
-          const metalColor = '#c0c0c0';
-          const darkMetal = '#808080';
-          
-          // Transform for side view - robot facing right toward ball
-          ctx.save();
-          ctx.translate(128, 0);
-          
-          // Back leg (facing right, so this is the left leg)
-          ctx.fillStyle = '#9a9a9a'; // Darker for depth
-          ctx.fillRect(-10, 140, 15, 70);
-          ctx.strokeStyle = darkMetal;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(-10, 140, 15, 70);
-          
-          // Back foot
-          ctx.fillStyle = '#3a7ab8'; // Darker blue
-          ctx.fillRect(-15, 210, 25, 12);
-          ctx.strokeRect(-15, 210, 25, 12);
-          
-          // Body (leaning forward and right toward ball) - properly connected
-          ctx.save();
-          ctx.translate(0, 60);
-          ctx.rotate(Math.PI / 10); // Lean forward toward ball
-          ctx.fillStyle = primaryColor;
-          ctx.fillRect(-20, 0, 40, 85); // Extended body to connect with legs
-          ctx.strokeStyle = darkMetal;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-20, 0, 40, 85);
-          
-          // Chest display (side view)
-          ctx.fillStyle = '#333';
-          ctx.fillRect(-5, 10, 15, 25);
-          ctx.fillStyle = '#00ff00';
-          for (let i = 0; i < 2; i++) {
-            for (let j = 0; j < 4; j++) {
-              ctx.fillRect(-3 + i * 7, 12 + j * 5, 3, 2);
-            }
-          }
-          ctx.restore();
-          
-          // Head (looking down and right at ball)
-          ctx.save();
-          ctx.translate(0, 40);
-          ctx.rotate(Math.PI / 6); // Looking down and right
-          ctx.fillStyle = metalColor;
-          ctx.fillRect(-20, -15, 40, 35);
-          ctx.strokeStyle = darkMetal;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-20, -15, 40, 35);
-          
-          // Eye (side view - one visible, facing right)
-          ctx.fillStyle = secondaryColor;
-          ctx.shadowBlur = 8;
-          ctx.shadowColor = secondaryColor;
-          ctx.beginPath();
-          ctx.arc(-8, 5, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          
-          // Antenna
-          ctx.strokeStyle = darkMetal;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(0, -15);
-          ctx.lineTo(0, -22);
-          ctx.stroke();
-          ctx.fillStyle = secondaryColor;
-          ctx.beginPath();
-          ctx.arc(0, -24, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          
-          // Front leg (bent for putting stance)
-          ctx.fillStyle = metalColor;
-          ctx.fillRect(5, 140, 15, 40); // Upper leg
-          ctx.strokeRect(5, 140, 15, 40);
-          
-          // Bent knee joint
-          ctx.beginPath();
-          ctx.arc(12, 180, 5, 0, Math.PI * 2);
-          ctx.fillStyle = primaryColor;
-          ctx.fill();
-          ctx.stroke();
-          
-          // Lower front leg (angled)
-          ctx.save();
-          ctx.translate(12, 180);
-          ctx.rotate(-Math.PI / 6); // Angle for stance
-          ctx.fillStyle = metalColor;
-          ctx.fillRect(-7, 0, 14, 35);
-          ctx.strokeRect(-7, 0, 14, 35);
-          ctx.restore();
-          
-          // Front foot
-          ctx.fillStyle = primaryColor;
-          ctx.fillRect(10, 210, 25, 12);
-          ctx.strokeRect(10, 210, 25, 12);
-          
-          // Only one arm visible in side view - extended toward ball
-          ctx.fillStyle = metalColor;
-          ctx.save();
-          ctx.translate(5, 75);
-          ctx.rotate(Math.PI / 3); // Angled toward ball
-          ctx.fillRect(-7, 0, 14, 50);
-          ctx.strokeStyle = darkMetal;
-          ctx.strokeRect(-7, 0, 14, 50);
-          ctx.restore();
-          
-          // Hand gripping putter (single hand visible)
-          ctx.fillStyle = primaryColor;
-          ctx.beginPath();
-          ctx.arc(25, 120, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          
-          // Draw appropriate club based on type
-          const isPutter = !clubType || clubType === 'putter';
-          const isWedge = clubType && (clubType.includes('wedge') || clubType.includes('chip'));
-          const isIron = clubType && (clubType.includes('iron') || isWedge);
-          const isWood = clubType && (clubType.includes('wood') || clubType === 'driver');
-          
-          // Club shaft (all clubs)
-          ctx.strokeStyle = '#444';
-          ctx.lineWidth = isWood ? 6 : 5;
-          ctx.beginPath();
-          ctx.moveTo(25, 120);
-          if (isPutter) {
-            ctx.lineTo(25, 205); // Straight shaft for putter
-          } else {
-            // Angled shaft for other clubs (ready to swing)
-            ctx.lineTo(35, 195); 
-          }
-          ctx.stroke();
-          
-          // Club grip (all clubs)
-          ctx.fillStyle = '#8B4513';
-          ctx.fillRect(22, 120, 8, 30);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(22, 120, 8, 30);
-          
-          // Club head varies by type
-          if (isPutter) {
-            // Putter head (blade style)
-            ctx.fillStyle = '#666';
-            ctx.fillRect(10, 201, 30, 10);
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(10, 201, 30, 10);
-            // Add putter face lines
-            ctx.strokeStyle = '#999';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 4; i++) {
-              ctx.beginPath();
-              ctx.moveTo(12 + i * 7, 203);
-              ctx.lineTo(12 + i * 7, 209);
-              ctx.stroke();
-            }
-          } else if (isWood) {
-            // Wood/Driver head (larger, rounded)
-            ctx.fillStyle = '#2a2a2a';
-            ctx.beginPath();
-            ctx.ellipse(40, 195, 15, 12, Math.PI / 6, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#111';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            // Add wood face lines
-            ctx.strokeStyle = '#555';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(30, 190);
-            ctx.lineTo(45, 200);
-            ctx.stroke();
-          } else {
-            // Iron/Wedge head (angled blade)
-            ctx.save();
-            ctx.translate(35, 195);
-            ctx.rotate(Math.PI / 6); // Loft angle
-            ctx.fillStyle = '#888';
-            ctx.fillRect(-5, -2, 20, 8);
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-5, -2, 20, 8);
-            // Add grooves
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 0.5;
-            for (let i = 0; i < 5; i++) {
-              ctx.beginPath();
-              ctx.moveTo(-3, -1 + i * 1.5);
-              ctx.lineTo(13, -1 + i * 1.5);
-              ctx.stroke();
-            }
-            ctx.restore();
-          }
-          
-          // Add concentration lines near head
-          ctx.strokeStyle = 'rgba(255, 200, 0, 0.5)';
-          ctx.lineWidth = 2;
-          for (let i = 0; i < 3; i++) {
-            ctx.beginPath();
-            ctx.arc(15, 45, 25 + i * 5, -0.3, 0.3);
-            ctx.stroke();
-          }
-          
-          ctx.restore();
-          
-          return new THREE.CanvasTexture(canvas);
-        };
-        
-        const playerRobotTexture = createPlayerRobotTexture();
-        playerRobotTexture.minFilter = THREE.LinearFilter;
-        playerRobotTexture.magFilter = THREE.LinearFilter;
-        
-        const playerRobotMaterial = new THREE.SpriteMaterial({
-          map: playerRobotTexture,
-          transparent: true,
-          depthWrite: false,
-          depthTest: true,
-        });
-        
-        const playerRobot = new THREE.Sprite(playerRobotMaterial);
-        
-        // Position on left side of the ball looking down at it
-        // Ball starts at (0, 0.08, 4)
-        playerRobot.position.set(
-          -0.6, // Closer to ball on left side
-          1.0, // Standing height
-          4.0  // Same z as ball
-        );
-        
-        playerRobot.scale.set(2, 2, 1);
-        playerRobot.userData.isPlayerRobot = true;
-        playerRobot.renderOrder = 10; // Render above terrain
-        scene.add(playerRobot);
-        
-        // Add shadow for player robot
-        const playerRobotShadow = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.5, 2.5),
-          new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide,
-          })
-        );
-        playerRobotShadow.rotation.x = -Math.PI / 2;
-        playerRobotShadow.position.set(
-          -0.6,
-          0.005,
-          4.2
-        );
-        playerRobotShadow.userData.isPlayerRobotShadow = true;
-        scene.add(playerRobotShadow);
-        
-        // Store references
-        (window as any).playerRobot = playerRobot;
-        (window as any).playerRobotShadow = playerRobotShadow;
-      };
-      
-      // Create or update player robot with appropriate club
-      const currentClub = gameMode === 'swing' && swingData ? swingData.club : 'putter';
-      createPlayerRobot(currentClub);
-      
-      // Store the create function for updates
-      (window as any).createPlayerRobot = createPlayerRobot;
-
-      // console.log(`🕳️ Hole positioned at ${holeDistanceFeet}ft (Z: ${holePos.z})`);
-      return holePos;
-      */ // END OF DISABLED CODE
     };
 
     // INITIAL HOLE CREATION - Use the centralized function
@@ -2996,104 +1609,9 @@ export default function ExpoGL3DView({
     (window as any).currentHolePosition = currentHolePosition;
     // Initial hole created
 
-    // Create flying blimp with "BAD YEAR" text
-    const createBlimp = () => {
-      // Create blimp body (ellipsoid shape)
-      const blimpGeometry = new THREE.SphereGeometry(3, 32, 16);
-      blimpGeometry.scale(1, 0.4, 0.4); // Stretch to blimp shape
-
-      const blimpMaterial = new THREE.MeshPhongMaterial({
-        color: 0x8b0000, // Dark red
-        emissive: 0x400000,
-        emissiveIntensity: 0.2,
-      });
-
-      const blimpBody = new THREE.Mesh(blimpGeometry, blimpMaterial);
-      blimpBody.position.set(0, 15, -20); // High in the sky
-      blimpBody.rotation.y = Math.PI / 4;
-      blimpBody.userData.isBlimp = true;
-      scene.add(blimpBody);
-
-      // Create "BAD YEAR" text on blimp
-      const createBlimpText = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d')!;
-
-        // Clear with transparency
-        ctx.clearRect(0, 0, 512, 128);
-
-        // Draw text
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 48px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('BAD YEAR', 256, 64);
-
-        const textTexture = new THREE.CanvasTexture(canvas);
-        const textMaterial = new THREE.SpriteMaterial({
-          map: textTexture,
-          transparent: true,
-          depthWrite: false,
-        });
-
-        const textSprite = new THREE.Sprite(textMaterial);
-        textSprite.scale.set(6, 1.5, 1);
-        textSprite.position.set(0, 15, -19.5); // Just in front of blimp
-        textSprite.userData.isBlimp = true;
-        scene.add(textSprite);
-
-        return textSprite;
-      };
-
-      const blimpText = createBlimpText();
-
-      // Create particle trail system
-      const particleCount = 50;
-      const particles = new THREE.BufferGeometry();
-      const positions = new Float32Array(particleCount * 3);
-      const colors = new Float32Array(particleCount * 3);
-
-      for (let i = 0; i < particleCount; i++) {
-        // Initialize behind blimp
-        positions[i * 3] = blimpBody.position.x - 3 - Math.random() * 5;
-        positions[i * 3 + 1] = blimpBody.position.y + (Math.random() - 0.5) * 2;
-        positions[i * 3 + 2] = blimpBody.position.z + (Math.random() - 0.5) * 2;
-
-        // Smoke color (greyish)
-        const intensity = 0.5 + Math.random() * 0.5;
-        colors[i * 3] = intensity;
-        colors[i * 3 + 1] = intensity;
-        colors[i * 3 + 2] = intensity;
-      }
-
-      particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-      const particleMaterial = new THREE.PointsMaterial({
-        size: 0.3,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.6,
-        blending: THREE.AdditiveBlending,
-      });
-
-      const particleSystem = new THREE.Points(particles, particleMaterial);
-      particleSystem.userData.isBlimp = true;
-      scene.add(particleSystem);
-
-      // Store references for animation
-      (window as any).blimp = {
-        body: blimpBody,
-        text: blimpText,
-        particles: particleSystem,
-        particlePositions: positions,
-        time: 0,
-      };
-    };
-
-    createBlimp();
+    // Create atmospheric scenery using SceneryManager
+    const blimpData = SceneryManager.createAtmosphericBlimp(scene);
+    (window as any).blimp = blimpData;
 
     // Store hole update function
     const updateHolePosition = (newHoleDistanceFeet: number) => {
@@ -3104,156 +1622,31 @@ export default function ExpoGL3DView({
       return { x: 0, y: 0.01, z: holeZ };
     };
 
-    // Green size update function for long putts
+    // Green size update function - simplified to avoid fragmentation
     const updateGreenSize = (newHoleDistanceFeet: number) => {
-      // Remove existing green and fringe
-      const existingGreen = scene.children.find(child => child.userData && child.userData.isGreen);
-      const existingFringe = scene.children.find(
-        child => child.userData && child.userData.isFringe
-      );
-      const existingFairway = scene.children.find(
-        child => child.userData && child.userData.isFairway
-      );
-
-      if (existingGreen) {
-        scene.remove(existingGreen);
-        (existingGreen as THREE.Mesh).geometry.dispose();
-        const material = (existingGreen as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-
-      if (existingFringe) {
-        scene.remove(existingFringe);
-        (existingFringe as THREE.Mesh).geometry.dispose();
-        const material = (existingFringe as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-
-      if (existingFairway) {
-        scene.remove(existingFairway);
-        (existingFairway as THREE.Mesh).geometry.dispose();
-        const material = (existingFairway as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-
-      // Create new adaptive green
-      const newGreenData = createAdaptiveGreen(newHoleDistanceFeet);
-      currentGreenRadius = newGreenData.radius;
-
-      const newGreen = new THREE.Mesh(newGreenData.geometry, greenMaterial);
-      newGreen.rotation.x = -Math.PI / 2;
-      newGreen.position.y = 0;
-      newGreen.receiveShadow = true;
-      newGreen.castShadow = false;
-      newGreen.userData.isGreen = true;
-      scene.add(newGreen);
-
-      // Update stored references
-      green = newGreen;
-      (window as any).greenMesh = newGreen;
-      (window as any).currentGreenRadius = currentGreenRadius; // Update global radius
-
-      // Create new adaptive fringe
-      const newFringeGeometry = new THREE.RingGeometry(
-        currentGreenRadius,
-        currentGreenRadius * 1.5,
-        64
-      );
-      const newFringe = new THREE.Mesh(newFringeGeometry, fringeMaterial);
-      newFringe.rotation.x = -Math.PI / 2;
-      newFringe.position.y = -0.01;
-      newFringe.receiveShadow = true;
-      newFringe.userData.isFringe = true;
-      scene.add(newFringe);
-
-      // Create new adaptive fairway
-      const newFairwayGeometry = new THREE.RingGeometry(
-        currentGreenRadius * 1.5,
-        currentGreenRadius * 2.5,
-        32
-      );
-      const newFairway = new THREE.Mesh(newFairwayGeometry, fairwayMaterial);
-      newFairway.rotation.x = -Math.PI / 2;
-      newFairway.position.y = -0.02;
-      newFairway.userData.isFairway = true;
-      scene.add(newFairway);
-
-      // console.log(`🏌️ Green resized to ${currentGreenRadius.toFixed(1)} units for ${newHoleDistanceFeet}ft putt`);
+      console.log(`🌱 Green size update called: ${newHoleDistanceFeet}ft`);
+      // Simplified - no complex terrain updates to avoid fragmentation
     };
-
     // Store globally for updates
     (window as any).updateHolePosition = updateHolePosition;
     (window as any).updateGreenSize = updateGreenSize;
     (window as any).currentHolePosition = currentHolePosition;
+    
+    // Ball progression now handled by useEffect - no global functions needed
 
     // Create simple anime-style sky
-    const createEnhancedSkyTexture = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; // Low resolution for performance
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d')!;
 
-      // Simple anime sky gradient
-      const skyGradient = ctx.createLinearGradient(0, 0, 0, 256);
-      skyGradient.addColorStop(0, '#ffffff'); // White at horizon
-      skyGradient.addColorStop(0.4, '#a8d8ff'); // Light blue
-      skyGradient.addColorStop(1, '#5fb3ff'); // Anime blue sky
-      ctx.fillStyle = skyGradient;
-      ctx.fillRect(0, 0, 256, 256);
-
-      // Add simple anime-style clouds
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      // Simple cloud shapes
-      for (let i = 0; i < 3; i++) {
-        const x = 50 + i * 80;
-        const y = 40 + i * 15;
-        // Draw simple cloud circles
-        ctx.beginPath();
-        ctx.arc(x, y, 20, 0, Math.PI * 2);
-        ctx.arc(x + 15, y, 18, 0, Math.PI * 2);
-        ctx.arc(x - 15, y, 18, 0, Math.PI * 2);
-        ctx.arc(x + 7, y - 10, 15, 0, Math.PI * 2);
-        ctx.arc(x - 7, y - 10, 15, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      return new THREE.CanvasTexture(canvas);
-    };
-
-    const skyTexture = createEnhancedSkyTexture();
-
-    // Create enhanced sky sphere with better quality - MUCH LARGER for swing mode
-    const skyGeometry = new THREE.SphereGeometry(500, 64, 64); // 10x larger for swing distances
-    const skyMaterial = new THREE.MeshBasicMaterial({
-      map: skyTexture,
-      side: THREE.BackSide,
-      fog: false, // Sky shouldn't be affected by fog
-    });
-    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
-    scene.add(sky);
+    // Create sky dome using SceneryManager
+    const sky = SceneryManager.createSkyDome(scene);
 
     // NO FOG AT ALL - IT'S BREAKING SWING MODE
     // scene.fog = new THREE.Fog(0xe6f3ff, 30, 80);
     scene.fog = null; // COMPLETELY DISABLE FOG
 
-    // Skip adding distant trees for performance
 
     // Render loop
     const render = () => {
       if (rendererRef.current && sceneRef.current && cameraRef.current) {
-        // DEBUG: Check what scene we're actually rendering
         const scene = sceneRef.current;
         const camera = cameraRef.current;
         const renderer = rendererRef.current;
@@ -3284,44 +1677,8 @@ export default function ExpoGL3DView({
           cameraRef.current.lookAt(0, lookAtY, -2);
         }
 
-        // Animate blimp
-        if ((window as any).blimp) {
-          const blimp = (window as any).blimp;
-          blimp.time += 0.005;
-
-          // Slow circular motion
-          const radius = 25;
-          const height = 15 + Math.sin(blimp.time * 0.5) * 2; // Gentle bobbing
-          blimp.body.position.x = Math.cos(blimp.time) * radius;
-          blimp.body.position.y = height;
-          blimp.body.position.z = Math.sin(blimp.time) * radius - 10;
-
-          // Keep text aligned with blimp
-          blimp.text.position.x = blimp.body.position.x;
-          blimp.text.position.y = blimp.body.position.y;
-          blimp.text.position.z = blimp.body.position.z + 0.5;
-
-          // Rotate blimp to face direction of movement
-          blimp.body.rotation.y = -blimp.time + Math.PI / 2;
-
-          // Update particle trail
-          const positions = blimp.particles.geometry.attributes.position.array;
-          const particleCount = positions.length / 3;
-
-          // Shift particles back and add new ones at blimp position
-          for (let i = particleCount - 1; i > 0; i--) {
-            positions[i * 3] = positions[(i - 1) * 3];
-            positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
-            positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
-          }
-
-          // Add new particle at blimp position with some randomness
-          positions[0] = blimp.body.position.x - Math.cos(blimp.body.rotation.y) * 3;
-          positions[1] = blimp.body.position.y + (Math.random() - 0.5) * 0.5;
-          positions[2] = blimp.body.position.z - Math.sin(blimp.body.rotation.y) * 3;
-
-          blimp.particles.geometry.attributes.position.needsUpdate = true;
-        }
+        // Animate atmospheric scenery using SceneryManager
+        SceneryManager.animateBlimp((window as any).blimp);
 
         // SLOPE UPDATES NOW HANDLED BY useEffect - MUCH SIMPLER!
 
@@ -3545,8 +1902,9 @@ export default function ExpoGL3DView({
           setIsAnimating(false);
           onPuttComplete(flightResult);
 
-          // Reset ball position
-          ball.position.set(0, 0.08, 4);
+          // Ball stays where it landed - no reset for progression gameplay!
+          
+          // Course layout will be updated by game logic via global functions
 
           // Reset camera to original position
           const camera = (window as any).camera;
@@ -3631,7 +1989,6 @@ export default function ExpoGL3DView({
         : 1.0;
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
 
-      // console.log('📎 PHYSICS SCALING:', {
       //   holeDistance: puttingData.holeDistance,
       //   worldUnitsPerFoot: worldUnitsPerFoot.toFixed(3),
       //   intendedDistanceFeet,
@@ -3668,7 +2025,6 @@ export default function ExpoGL3DView({
         z: aimDirection.z * initialSpeed,
       };
 
-      // console.log('🏌️ PUTT PHYSICS DEBUG:', {
       //   '🎯 User Distance Setting (ft)': targetDistanceFeet,
       //   '⚡ User Power Setting (%)': powerPercent,
       //   '📏 Intended Distance (ft)': intendedDistanceFeet,
@@ -3735,7 +2091,6 @@ export default function ExpoGL3DView({
               const curveFactor = puttingData.slopeLeftRight * 0.12; // MASSIVELY DRAMATIC curve effect
               velocity.x += curveFactor * deltaTime;
 
-              // console.log('↔️ Left/Right slope applied:', {
               //   slopeLeftRight: puttingData.slopeLeftRight,
               //   curveFactor,
               //   velocityX: velocity.x,
@@ -3749,7 +2104,6 @@ export default function ExpoGL3DView({
               velocity.x += velocity.x * speedEffect * deltaTime;
               velocity.z += velocity.z * speedEffect * deltaTime;
 
-              // console.log('⬆️ Up/Down slope continuous effect:', {
               //   slopeUpDown: puttingData.slopeUpDown,
               //   speedEffect,
               //   currentSpeed,
@@ -3759,7 +2113,6 @@ export default function ExpoGL3DView({
         }
       }
 
-      // console.log('🎯 SIMULATION RESULTS:', {
       //   'Intended Distance (world)': intendedDistanceWorld,
       //   'Actual Distance Traveled': totalDistanceTraveled,
       //   'Trajectory Points': trajectory.length,
@@ -3806,7 +2159,6 @@ export default function ExpoGL3DView({
           const currentPosVec = new THREE.Vector3(currentPos.x, currentPos.y, currentPos.z);
           const distanceToHole = currentPosVec.distanceTo(holeCenter);
 
-          // console.log(
           //   '🏌️ Ball position:',
           //   currentPos,
           //   'Hole position:',
@@ -4349,11 +2701,12 @@ export default function ExpoGL3DView({
               maxHeight: Math.max(...trajectory.map(p => p.y)),
             });
 
-            // Reset ball position and visibility after delay
+            // Make ball visible again after delay (stays at final position for progression)
             setTimeout(() => {
               if (ballRef.current) {
-                ballRef.current.position.set(0, 0.08, 4);
                 ballRef.current.visible = true;
+                // Ball stays where it landed - user continues from new lie position
+                // Course layout will be updated by game logic via global functions
               }
             }, 2000);
             return;
@@ -4374,7 +2727,6 @@ export default function ExpoGL3DView({
           const finalPosVec = new THREE.Vector3(finalPos.x, finalPos.y, finalPos.z);
           const distanceToHole = finalPosVec.distanceTo(holeCenter);
 
-          // console.log(
           //   '🎯 Final position check - Ball:',
           //   finalPos,
           //   'Hole:',
@@ -4531,11 +2883,12 @@ export default function ExpoGL3DView({
             ballRef.current.visible = false;
           }
 
-          // Reset ball position after delay
+          // Make ball visible again after delay (stays at final position for progression)
           setTimeout(() => {
             if (ballRef.current) {
-              ballRef.current.position.set(0, 0.08, 4);
               ballRef.current.visible = true;
+              // Ball stays at final position - user continues from new lie position
+              // Course layout will be updated by game logic via global functions
             }
           }, 2000);
         }

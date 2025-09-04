@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     top: 200, // Move further down to avoid bird's eye view
     right: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.85)', // More opaque
-    padding: 12,
+    padding: 8,
     borderRadius: 10,
     minWidth: 170, // Slightly narrower
     zIndex: 1500, // Ensure it's on top
@@ -425,12 +425,12 @@ const styles = StyleSheet.create({
   },
   hudLabel: {
     color: '#999',
-    fontSize: 13,
+    fontSize: 10,
     marginRight: 10,
   },
   hudValue: {
     color: '#FFF',
-    fontSize: 16, // Larger for visibility
+    fontSize: 10, // Larger for visibility
     fontWeight: 'bold',
   },
   sideSummaryContainer: {
