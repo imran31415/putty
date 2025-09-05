@@ -332,7 +332,18 @@ export default function ExpoGL3DView({
     
     if (showCourseFeatures && courseHole) {
       console.log('🌿 Re-rendering course features for ball progression - hole:', courseHole.number);
-      CourseFeatureRenderer.renderCourseFeatures(scene, courseHole, currentPin, swingChallengeProgress);
+      
+      // Get ball progression from swing challenge progress or default to 0
+      const ballProgressionYards = swingChallengeProgress?.ballPositionYards || 0;
+      
+      CourseFeatureRenderer.renderCourseFeatures(
+        scene, 
+        courseHole, 
+        currentPin, 
+        swingChallengeProgress,
+        ballProgressionYards,
+        gameMode
+      );
       
       // Green is now created by CourseFeatureRenderer.renderPinIndicator() at exact pin position
       // No additional green creation needed here
@@ -349,8 +360,7 @@ export default function ExpoGL3DView({
       const remainingYards = swingChallengeProgress.remainingYards || 0;
       const totalHoleYards = ballProgressionYards + remainingYards;
       
-      // Store current ball progression globally for course features
-      (window as any).currentBallProgressionYards = ballProgressionYards;
+      // Ball progression is now passed directly to course features - no global needed
       
       // CRITICAL FIX: Keep ball at avatar position, move world instead
       if (ballRef.current) {
