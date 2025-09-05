@@ -164,8 +164,8 @@ export const SWING_CHALLENGES: LevelConfig[] = [
       '🌿 Welcome to Augusta National! The legendary Tea Olive hole features a slight dogleg right with an uphill approach to an elevated, undulating green. Navigate the fairway bunker and stick your approach close!',
     holeDistance: 445, // yards
     par: 4,
-    slopeUpDown: 6, // Uphill approach
-    slopeLeftRight: 4, // Right slope on green
+    slopeUpDown: 20, // Extremely steep uphill approach for real challenge
+    slopeLeftRight: 15, // Severe right slope on green - very challenging
     greenSpeed: 13, // Masters speed
     reward: 500, // Premium reward for Augusta
     rewardByScore: {

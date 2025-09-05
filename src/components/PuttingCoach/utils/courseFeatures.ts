@@ -254,30 +254,32 @@ export function createBeautifulTerrainMesh(terrain: TerrainFeature, index: numbe
   
   switch (terrain.type) {
     case 'hill':
-      // Flatten the dome: shallow mound sized from course data
-      geometry = new THREE.BoxGeometry(
-        (width * worldUnitsPerFoot) / 8,
-        Math.max(0.5, (height * worldUnitsPerFoot) / 16),
-        (length * worldUnitsPerFoot) / 8
+      // Create subtle mounds instead of visible boxes
+      geometry = new THREE.SphereGeometry(
+        Math.max(2, (width * worldUnitsPerFoot) / 20), // Much smaller, rounded
+        16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5 // Half sphere
       );
       material = new THREE.MeshStandardMaterial({
-        color: 0x3a7d3a,
-        roughness: 0.7,
+        color: 0x2d5a2d, // Darker green to blend with ground
+        roughness: 0.9,
         metalness: 0.0,
+        transparent: true,
+        opacity: 0.6, // Semi-transparent to be subtle
       });
       break;
       
     case 'ridge':
-      // Ridge scaled from course data instead of fixed sizes
-      geometry = new THREE.BoxGeometry(
-        Math.max(1, (width * worldUnitsPerFoot) / 10),
-        Math.max(0.5, (height * worldUnitsPerFoot) / 18),
-        Math.max(2, (length * worldUnitsPerFoot) / 10)
+      // Make ridges much more subtle
+      geometry = new THREE.SphereGeometry(
+        Math.max(1, (width * worldUnitsPerFoot) / 25), // Much smaller
+        12, 6, 0, Math.PI * 2, 0, Math.PI * 0.3 // Lower profile
       );
       material = new THREE.MeshStandardMaterial({
-        color: 0x8B7355,
-        roughness: 0.85,
+        color: 0x2d5a2d, // Same as hills to blend
+        roughness: 0.9,
         metalness: 0.0,
+        transparent: true,
+        opacity: 0.4, // Very subtle
       });
       break;
       

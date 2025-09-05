@@ -308,10 +308,18 @@ export default function ExpoGL3DView({
       return;
     }
 
-    // Putt mode: keep legacy adaptive green sizing
-    const updateGreenSize = (window as any).updateGreenSize;
-    if (updateGreenSize) {
-      updateGreenSize(puttingData.holeDistance);
+    // Putt mode: create proper green around hole
+    if (courseHole && puttingData.holeDistance <= 100) {
+      // We're putting on a course hole - create the JSON-based green
+      console.log('🎯 Putt mode on course hole - creating JSON green');
+      HoleTerrainRenderer.removeAllTerrain(scene);
+      HoleTerrainRenderer.createHoleGreen(scene, courseHole);
+    } else {
+      // Practice putting mode: keep legacy adaptive green sizing
+      const updateGreenSize = (window as any).updateGreenSize;
+      if (updateGreenSize) {
+        updateGreenSize(puttingData.holeDistance);
+      }
     }
   }, [gameMode, puttingData.holeDistance, puttingData.swingHoleYards, courseHole]);
 
@@ -604,76 +612,7 @@ export default function ExpoGL3DView({
 
     // Clean terrain creation
 
-    // Create slope visualization overlay
-    const createSlopeOverlay = (slopeUpDown: number, slopeLeftRight: number) => {
-      return null;
-
-      if (Math.abs(slopeUpDown) < 0.1 && Math.abs(slopeLeftRight) < 0.1) {
-        return null; // No overlay for flat greens
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
-      const ctx = canvas.getContext('2d')!;
-
-      // Create gradient showing slope direction and intensity
-      const totalSlope = Math.sqrt(slopeUpDown * slopeUpDown + slopeLeftRight * slopeLeftRight);
-      const intensity = Math.min(totalSlope / 15, 1); // Normalize intensity
-
-      // Calculate slope direction angle
-      const slopeAngle = Math.atan2(slopeLeftRight, -slopeUpDown);
-
-      // Create directional gradient
-      const centerX = 256;
-      const centerY = 256;
-      const radius = 200;
-
-      const gradient = ctx.createLinearGradient(
-        centerX - Math.cos(slopeAngle) * radius,
-        centerY - Math.sin(slopeAngle) * radius,
-        centerX + Math.cos(slopeAngle) * radius,
-        centerY + Math.sin(slopeAngle) * radius
-      );
-
-      // Professional color scheme: yellow for low areas, red for high areas
-      if (slopeUpDown > 0) {
-        // Uphill: red indicates higher elevation
-        gradient.addColorStop(0, `rgba(255, 255, 100, ${intensity * 0.2})`); // Yellow (low)
-        gradient.addColorStop(1, `rgba(255, 100, 100, ${intensity * 0.3})`); // Red (high)
-      } else if (slopeUpDown < 0) {
-        // Downhill: reverse colors
-        gradient.addColorStop(0, `rgba(255, 100, 100, ${intensity * 0.3})`); // Red (high)
-        gradient.addColorStop(1, `rgba(100, 150, 255, ${intensity * 0.2})`); // Blue (low)
-      } else {
-        // Flat - just side slope
-        gradient.addColorStop(0, `rgba(255, 255, 100, ${intensity * 0.2})`);
-        gradient.addColorStop(1, `rgba(255, 200, 100, ${intensity * 0.2})`);
-      }
-
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 512, 512);
-
-      // Add contour lines for professional appearance
-      ctx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.8})`;
-      ctx.lineWidth = 2;
-
-      const lineCount = Math.ceil(intensity * 8) + 2;
-      for (let i = 0; i < lineCount; i++) {
-        const offset = (i - lineCount / 2) * 25;
-        const startX = centerX + Math.cos(slopeAngle + Math.PI / 2) * offset;
-        const startY = centerY + Math.sin(slopeAngle + Math.PI / 2) * offset;
-        const endX = startX + Math.cos(slopeAngle) * 100;
-        const endY = startY + Math.sin(slopeAngle) * 100;
-
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      }
-
-      return new THREE.CanvasTexture(canvas);
-    };
+    // Slope overlay completely removed - no white glow effects
 
     // Create terrain: rectangular tee box + fairway when in swing mode,
     // classic circular green when in putt mode.
@@ -987,19 +926,14 @@ export default function ExpoGL3DView({
     // Store reference for updates
     (window as any).updateAimLineVisualization = updateAimLineVisualization;
 
-    // Create slope visualization overlay - ONLY for putting mode (no bright gradients)
+    // Slope visualization completely disabled - no white glow effects anywhere
     const createSlopeVisualization = (slopeUpDown: number, slopeLeftRight: number) => {
-      // Remove existing slope overlays
+      // Remove any existing slope overlays completely
       const existingOverlays = scene.children.filter(
         child => child.userData && (child.userData.isSlopeOverlay || child.userData.isSlopeArrow)
       );
       existingOverlays.forEach(overlay => scene.remove(overlay));
-
-      // Don't show any slope visualization in swing mode or swing challenges
-      if (gameMode === 'swing' || puttingData.swingHoleYards) return;
-
-      // For putting mode, we keep the existing slope physics but don't add any visual overlay
-      // Return early to ensure nothing bright is drawn on the green
+      // Never create any visual overlays - slopes affect physics only
       return;
     };
 
@@ -1759,16 +1693,17 @@ export default function ExpoGL3DView({
       (window as any).treeLines = { leftTrees, rightTrees };
     }
     
-    // 6) Add some scattered distant buildings/clubhouse - positioned to be visible
+    // 6) Add some scattered distant buildings/clubhouse - positioned to be visible (removed random boxes)
     const createClubhouseBuildings = () => {
-      for (let i = 0; i < 4; i++) {
-        const buildingGeometry = new THREE.BoxGeometry(60, 30, 40);
+      // Only create 2 distant buildings, positioned far from play area
+      for (let i = 0; i < 2; i++) {
+        const buildingGeometry = new THREE.BoxGeometry(40, 20, 30);
         const buildingMaterial = new THREE.MeshLambertMaterial({
-          color: i === 0 ? 0xd4af8c : (i === 1 ? 0xc4a484 : 0xa68b5b), // Varied clubhouse colors
+          color: i === 0 ? 0xd4af8c : 0xc4a484, // Clubhouse colors
         });
         const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-        const angle = (i / 4) * Math.PI * 0.8 + Math.PI * 0.6; // Spread across visible horizon
-        const distance = 600 + i * 100; // Much closer
+        const angle = (i / 2) * Math.PI * 0.3 + Math.PI * 1.3; // Behind and to the side
+        const distance = 1000 + i * 200; // Much further back
         building.position.set(
           Math.cos(angle) * distance,
           0, // On ground level
