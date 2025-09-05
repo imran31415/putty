@@ -155,6 +155,29 @@ export const SWING_CHALLENGES: LevelConfig[] = [
     unlockRequirement: 101,
     sceneTheme: 'sunset',
   },
+  {
+    id: 103,
+    type: 'swing',
+    name: 'Augusta National - Tea Olive',
+    description: '445yd Par 4 • Dogleg right • Elevated green',
+    introText:
+      '🌿 Welcome to Augusta National! The legendary Tea Olive hole features a slight dogleg right with an uphill approach to an elevated, undulating green. Navigate the fairway bunker and stick your approach close!',
+    holeDistance: 445, // yards
+    par: 4,
+    slopeUpDown: 6, // Uphill approach
+    slopeLeftRight: 4, // Right slope on green
+    greenSpeed: 13, // Masters speed
+    reward: 500, // Premium reward for Augusta
+    rewardByScore: {
+      eagle: 1500, // 2 strokes (eagle on par 4)
+      birdie: 800, // 3 strokes (birdie)
+      par: 500, // 4 strokes (par)
+      bogey: 250, // 5 strokes (bogey)
+      double: 100, // 6+ strokes (double bogey or worse)
+    },
+    unlockRequirement: 102,
+    sceneTheme: 'golden', // Masters theme
+  },
 ];
 
 // Combined array for backward compatibility

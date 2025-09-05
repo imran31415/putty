@@ -1,0 +1,206 @@
+{
+  "id": "augusta-national",
+  "name": "Augusta National Golf Club",
+  "location": "Augusta, Georgia",
+  "description": "Home of The Masters Tournament",
+  "metadata": {
+    "designer": "Alister MacKenzie & Bobby Jones",
+    "yearBuilt": 1933,
+    "par": 72,
+    "totalDistance": 7475,
+    "difficulty": "expert",
+    "climate": "subtropical",
+    "seasonality": ["spring", "summer", "fall"]
+  },
+  "holes": [
+    {
+      "id": "augusta-1",
+      "number": 1,
+      "par": 4,
+      "distance": 445,
+      "handicap": 18,
+      "tees": [
+        {
+          "name": "Masters",
+          "position": { "x": 0, "y": 0, "z": 0 },
+          "distance": 445
+        },
+        {
+          "name": "Member",
+          "position": { "x": 0, "y": 30, "z": 0 },
+          "distance": 400
+        }
+      ],
+      "fairway": {
+        "width": 35,
+        "bends": [
+          {
+            "start": 200,
+            "end": 300,
+            "direction": "left",
+            "angle": 12
+          }
+        ]
+      },
+      "green": {
+        "surface": {
+          "width": 35,
+          "length": 25,
+          "elevation": 15,
+          "greenSpeed": 13
+        },
+        "contours": [
+          { "x": 0, "y": 0, "elevation": 0, "slopeX": 0, "slopeY": 0 },
+          { "x": 10, "y": 5, "elevation": 2, "slopeX": 5, "slopeY": 3 },
+          { "x": -10, "y": -5, "elevation": -1, "slopeX": -3, "slopeY": -2 },
+          { "x": 15, "y": 10, "elevation": 3, "slopeX": 8, "slopeY": 5 },
+          { "x": -15, "y": -10, "elevation": -2, "slopeX": -6, "slopeY": -4 }
+        ],
+        "slopes": [
+          {
+            "type": "uphill",
+            "direction": 45,
+            "magnitude": 8,
+            "startPoint": { "x": -15, "y": -10 },
+            "endPoint": { "x": 15, "y": 10 }
+          },
+          {
+            "type": "left",
+            "direction": 270,
+            "magnitude": 5,
+            "startPoint": { "x": 5, "y": -12 },
+            "endPoint": { "x": 5, "y": 12 }
+          }
+        ],
+        "fringe": {
+          "width": 3,
+          "height": 2,
+          "texture": "fine"
+        }
+      },
+      "hazards": [
+        {
+          "type": "bunker",
+          "position": { "x": 15, "y": 10, "z": -2 },
+          "dimensions": { "width": 8, "length": 12, "depth": 3 },
+          "penalty": "stroke"
+        },
+        {
+          "type": "rough",
+          "position": { "x": -20, "y": 0, "z": 0 },
+          "dimensions": { "width": 10, "length": 50, "depth": 0 },
+          "penalty": "distance"
+        }
+      ],
+      "terrain": [
+        {
+          "type": "hill",
+          "position": { "x": 25, "y": 15, "z": 0 },
+          "dimensions": { "width": 15, "length": 20, "height": 8 },
+          "slope": 12,
+          "direction": 225
+        }
+      ],
+      "pinPositions": [
+        {
+          "id": "augusta-1-front",
+          "name": "Front",
+          "position": { "x": 0, "y": -8, "z": 0 },
+          "difficulty": "medium",
+          "notes": "Safe pin position, good birdie opportunity"
+        },
+        {
+          "id": "augusta-1-back",
+          "name": "Back",
+          "position": { "x": 0, "y": 8, "z": 2 },
+          "difficulty": "hard",
+          "notes": "Elevated pin, requires precise distance control"
+        },
+        {
+          "id": "augusta-1-sunday",
+          "name": "Sunday",
+          "position": { "x": -5, "y": 5, "z": 1 },
+          "difficulty": "hard",
+          "notes": "Traditional Masters Sunday pin position"
+        }
+      ]
+    },
+    {
+      "id": "augusta-12",
+      "number": 12,
+      "par": 3,
+      "distance": 155,
+      "handicap": 16,
+      "tees": [
+        {
+          "name": "Masters",
+          "position": { "x": 0, "y": 0, "z": 0 },
+          "distance": 155
+        }
+      ],
+      "fairway": {
+        "width": 0,
+        "bends": []
+      },
+      "green": {
+        "surface": {
+          "width": 30,
+          "length": 20,
+          "elevation": 0,
+          "greenSpeed": 14
+        },
+        "contours": [
+          { "x": 0, "y": 0, "elevation": 0, "slopeX": 0, "slopeY": 0 },
+          { "x": 8, "y": 0, "elevation": -3, "slopeX": -12, "slopeY": 0 },
+          { "x": -8, "y": 0, "elevation": 2, "slopeX": 8, "slopeY": 0 }
+        ],
+        "slopes": [
+          {
+            "type": "diagonal",
+            "direction": 315,
+            "magnitude": 15,
+            "startPoint": { "x": 10, "y": 10 },
+            "endPoint": { "x": -10, "y": -10 }
+          }
+        ],
+        "fringe": {
+          "width": 2,
+          "height": 1,
+          "texture": "medium"
+        }
+      },
+      "hazards": [
+        {
+          "type": "water",
+          "position": { "x": 0, "y": -25, "z": -5 },
+          "dimensions": { "width": 40, "length": 15, "depth": 8 },
+          "penalty": "stroke"
+        }
+      ],
+      "terrain": [],
+      "pinPositions": [
+        {
+          "id": "augusta-12-front",
+          "name": "Front",
+          "position": { "x": 0, "y": -6, "z": 0 },
+          "difficulty": "easy",
+          "notes": "Safe front pin, away from the water"
+        },
+        {
+          "id": "augusta-12-back",
+          "name": "Back",
+          "position": { "x": 0, "y": 6, "z": 1 },
+          "difficulty": "hard",
+          "notes": "Dangerous back pin, easy to go long"
+        },
+        {
+          "id": "augusta-12-sunday",
+          "name": "Sunday",
+          "position": { "x": 8, "y": 0, "z": -2 },
+          "difficulty": "expert",
+          "notes": "Famous Golden Bell Sunday pin, extremely difficult"
+        }
+      ]
+    }
+  ]
+}
