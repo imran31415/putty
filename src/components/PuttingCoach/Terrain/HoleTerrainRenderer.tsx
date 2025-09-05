@@ -35,20 +35,16 @@ export class HoleTerrainRenderer {
     if (gameMode === 'swing' && holeData) {
       // Create terrain for swing mode based on hole specification
       elements.teeBox = HoleTerrainRenderer.createTeeBox(scene, holeData);
-      elements.fairway = HoleTerrainRenderer.createFairway(scene, holeData);
+      // elements.fairway = HoleTerrainRenderer.createFairway(scene, holeData); // Disabled fairway
       elements.leftRough = HoleTerrainRenderer.createLeftRough(scene, holeData);
       elements.rightRough = HoleTerrainRenderer.createRightRough(scene, holeData);
       
-      // ALWAYS create the hole green immediately so it's visible from the tee
-      const holeGreen = HoleTerrainRenderer.createHoleGreen(scene, holeData);
-      elements.puttingGreen = holeGreen; // Store as putting green for consistency
+      // NO GREEN CREATION - CLEAN SLATE
       
-      console.log(`🏌️ Created complete hole terrain for ${holeData.distance}yd par-${holeData.par} hole`);
+      console.log(`🏌️ Created complete hole terrain for ${holeData.distance}yd par-${holeData.par} hole (fairway disabled)`);
     } else {
-      // Create putting green for putt mode
-      elements.puttingGreen = HoleTerrainRenderer.createPuttingGreen(scene, 15);
-      
-      console.log('🏌️ Created putting green for putt mode');
+      // NO GREEN CREATION - CLEAN SLATE
+      console.log('🏌️ Created terrain for putt mode (no green)');
     }
 
     return elements;
@@ -179,91 +175,9 @@ export class HoleTerrainRenderer {
     return rightRough;
   }
 
-  /**
-   * Create putting green around hole (for putt mode or when close to hole)
-   */
-  private static createPuttingGreen(scene: THREE.Scene, radius: number): THREE.Mesh {
-    const greenGeometry = new THREE.CircleGeometry(radius, 64);
-    const greenMaterial = new THREE.MeshStandardMaterial({
-      color: 0x228B22, // Rich putting green color
-      roughness: 0.3, // Smoother for putting
-      metalness: 0.0,
-    });
+  // createPuttingGreen method REMOVED - CLEAN SLATE
 
-    const puttingGreen = new THREE.Mesh(greenGeometry, greenMaterial);
-    puttingGreen.rotation.x = -Math.PI / 2;
-    puttingGreen.position.set(0, 0.01, 4); // Around avatar position
-    puttingGreen.receiveShadow = true;
-    puttingGreen.userData.isPuttingGreen = true;
-    scene.add(puttingGreen);
-
-    console.log(`🌱 Created putting green with ${radius} unit radius`);
-    return puttingGreen;
-  }
-
-  /**
-   * Create hole green using the EXACT same material as the working main app green
-   */
-  static createHoleGreen(scene: THREE.Scene, holeData: GolfHole): THREE.Mesh {
-    // Remove any existing green around hole
-    const existingGreen = scene.children.find(child => child.userData?.isHoleGreen);
-    if (existingGreen) {
-      scene.remove(existingGreen);
-      if ((existingGreen as THREE.Mesh).geometry) (existingGreen as THREE.Mesh).geometry.dispose();
-      if ((existingGreen as THREE.Mesh).material) {
-        const material = (existingGreen as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-    }
-
-    // Get green size from JSON - make it large enough to see from distance
-    const greenSurface = holeData.green?.surface;
-    const greenWidthFeet = greenSurface?.width || 40;
-    const greenLengthFeet = greenSurface?.length || 30;
-    const avgSizeFeet = (greenWidthFeet + greenLengthFeet) / 2;
-    const greenRadius = Math.max(12, avgSizeFeet * 0.25); // Bigger for long-distance visibility
-    
-    // Calculate green position based on remaining distance (where flag appears to player)
-    const swingProgress = (window as any).swingChallengeProgress;
-    const remainingYards = swingProgress?.remainingYards || 99;
-    const remainingFeet = remainingYards * 3;
-    
-    // Green should be positioned where the flag appears (relative to ball at Z=4)
-    const greenZ = 4 - remainingFeet * 0.05; // Use swing mode scaling
-    
-    console.log(`🎯 Positioning green at remaining distance: ${remainingYards}yd → Z=${greenZ.toFixed(2)} (flag should be here too)`);
-    
-    // Use EXACT same geometry and material as working main app green
-    const greenGeometry = new THREE.CircleGeometry(greenRadius, 64);
-    const greenMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4caf50, // EXACT same color as working main app green
-      roughness: 0.8,  // EXACT same roughness as working main app green
-      metalness: 0.0,  // EXACT same metalness as working main app green
-    });
-
-    const holeGreen = new THREE.Mesh(greenGeometry, greenMaterial);
-    holeGreen.rotation.x = -Math.PI / 2;
-    // Position green where the flag appears to the player (not the original hole position)
-    holeGreen.position.set(0, 0.1, greenZ); // At remaining distance position
-    holeGreen.receiveShadow = true;
-    holeGreen.userData.isHoleGreen = true;
-    holeGreen.renderOrder = 100; // Very high render order - above everything
-    holeGreen.frustumCulled = false; // Never cull this green - always render it
-    holeGreen.material.depthTest = false; // Always render on top, ignore depth
-    
-    // Make the material more visible with emissive properties
-    greenMaterial.emissive = new THREE.Color(0x2a8a2a); // Stronger green glow for visibility
-    greenMaterial.emissiveIntensity = 0.5;
-    
-    scene.add(holeGreen);
-
-    console.log(`🌱 Created hole green: radius=${greenRadius.toFixed(2)} at remaining distance Z=${greenZ.toFixed(2)} (${remainingYards}yd)`);
-    return holeGreen;
-  }
+  // createHoleGreen method REMOVED - CLEAN SLATE
 
   /**
    * Update terrain based on ball progression through hole
@@ -300,54 +214,11 @@ export class HoleTerrainRenderer {
       }
     }
 
-    // ALWAYS create/update the green during progression so it's visible from any distance
-    console.log(`🎯 Ball progression update: ${remainingYards}yd remaining - ensuring green is visible`);
-    HoleTerrainRenderer.createHoleGreen(scene, holeData);
+    // NO GREEN REPOSITIONING - CLEAN SLATE
+    console.log(`🎯 Ball progression update: ${remainingYards}yd remaining`);
   }
 
-  /**
-   * Create putting green around hole when approaching
-   */
-  private static createApproachGreen(scene: THREE.Scene, remainingYards: number): THREE.Mesh {
-    // Remove any existing approach green
-    const existingApproachGreen = scene.children.find(
-      child => child.userData?.isApproachGreen
-    );
-    if (existingApproachGreen) {
-      scene.remove(existingApproachGreen);
-      if ((existingApproachGreen as THREE.Mesh).geometry) (existingApproachGreen as THREE.Mesh).geometry.dispose();
-      if ((existingApproachGreen as THREE.Mesh).material) {
-        const material = (existingApproachGreen as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-    }
-
-    // Create green around hole position (not avatar position)
-    const remainingFeet = remainingYards * 3;
-    const holeZ = 4 - remainingFeet * HoleTerrainRenderer.WORLD_UNITS_PER_FOOT;
-    const greenRadius = Math.max(8, remainingYards / 3);
-
-    const greenGeometry = new THREE.CircleGeometry(greenRadius, 64);
-    const greenMaterial = new THREE.MeshStandardMaterial({
-      color: 0x228B22, // Rich putting green color
-      roughness: 0.3, // Smoother for putting
-      metalness: 0.0,
-    });
-
-    const approachGreen = new THREE.Mesh(greenGeometry, greenMaterial);
-    approachGreen.rotation.x = -Math.PI / 2;
-    approachGreen.position.set(0, 0.01, holeZ); // Around hole position
-    approachGreen.receiveShadow = true;
-    approachGreen.userData.isApproachGreen = true;
-    scene.add(approachGreen);
-
-    console.log(`🌱 Created approach green around hole: ${remainingYards}yd remaining → Z=${holeZ.toFixed(2)}`);
-    return approachGreen;
-  }
+  // createApproachGreen method REMOVED - CLEAN SLATE
 
   /**
    * Remove all terrain elements

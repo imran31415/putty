@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GolfHole, PinPosition, Hazard, TerrainFeature } from '../../../types/game';
 import { GolfPhysics } from '../Physics/GolfPhysics';
+// No green renderer needed - greens are managed separately
 
 /**
  * CourseFeatureRenderer - Modular course feature rendering for easy development
@@ -47,35 +48,11 @@ export class CourseFeatureRenderer {
       });
     }
     
-    // Render fairway features (landing zones, doglegs)
-    if (hole.fairway) {
-      if (hole.fairway.landingZones) {
-        hole.fairway.landingZones.forEach((zone: any, index: number) => {
-          const zoneDistanceYards = (zone.start + zone.end) / 2;
-          const currentBallYards = (window as any).currentBallProgressionYards || 0;
-          const relativePos = GolfPhysics.getFeatureRelativePosition(zoneDistanceYards, currentBallYards);
-          
-          // Skip landing zones that are far behind the ball
-          if (relativePos.isBehind && Math.abs(relativePos.relativeYards) > 75) {
-            console.log(`🚫 Skipping landing zone at ${zoneDistanceYards}yd (${Math.abs(relativePos.relativeYards)}yd behind ball)`);
-            return;
-          }
-          
-          console.log(`✅ Rendering landing zone at ${zoneDistanceYards}yd (${relativePos.description})`);
-          CourseFeatureRenderer.renderLandingZone(scene, zone, index);
-        });
-      }
-      
-      if (hole.fairway.bends && hole.fairway.bends.length > 0) {
-        hole.fairway.bends.forEach((bend: any, index: number) => {
-          CourseFeatureRenderer.renderDogleg(scene, bend, index);
-        });
-      }
-    }
+    // Fairway features (landing zones, doglegs) temporarily disabled
     
     // Render pin position indicator
     if (pin) {
-      CourseFeatureRenderer.renderPinIndicator(scene, pin);
+      CourseFeatureRenderer.renderPinIndicator(scene, pin, challengeProgress);
     }
     
     console.log('✨ Course features rendered successfully');
@@ -467,7 +444,7 @@ export class CourseFeatureRenderer {
   /**
    * Render pin position indicator
    */
-  private static renderPinIndicator(scene: THREE.Scene, pin: PinPosition): THREE.Mesh {
+  private static renderPinIndicator(scene: THREE.Scene, pin: PinPosition, challengeProgress?: any): THREE.Mesh {
     const worldUnitsPerFoot = 0.05;
     
     const geometry = new THREE.CylinderGeometry(
@@ -509,8 +486,14 @@ export class CourseFeatureRenderer {
       roughness: 0.6
     });
     
-    // Position relative to hole
-    const currentHolePos = (window as any).currentHolePosition || { x: 0, y: 0, z: -4 };
+    // Use challengeProgress parameter instead of window global (more reliable)
+    const remainingYards = challengeProgress?.remainingYards || 445;
+    const remainingFeet = remainingYards * 3;
+    const holeZ = 4 - remainingFeet * 0.05; // Use swing mode scaling
+    
+    const currentHolePos = { x: 0, y: 0, z: holeZ };
+    console.log(`📍 Pin calculation: challengeProgress=`, challengeProgress);
+    console.log(`📍 Pin positioned for ${remainingYards}yd remaining → Z=${holeZ.toFixed(2)}`);
     
     const pinMesh = new THREE.Mesh(geometry, material);
     // pin position values are in yards; convert to feet then to world units
@@ -522,7 +505,29 @@ export class CourseFeatureRenderer {
     pinMesh.userData.isPinIndicator = true;
     scene.add(pinMesh);
     
-    console.log(`📍 Created ${pin.difficulty} pin at world pos (${pinMesh.position.x.toFixed(2)}, ${pinMesh.position.z.toFixed(2)})`);
+    // Create hole at pin position
+    const holeGeometry = new THREE.CylinderGeometry(
+      0.5 * worldUnitsPerFoot, // radius (4.25 inches = 0.35 feet)
+      0.5 * worldUnitsPerFoot,
+      0.2 * worldUnitsPerFoot, // depth
+      16
+    );
+    const holeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x000000, // Black hole
+      roughness: 1.0,
+      metalness: 0.0,
+    });
+    
+    const holeMesh = new THREE.Mesh(holeGeometry, holeMaterial);
+    // Position hole at same location as pin, but slightly below ground
+    holeMesh.position.copy(pinMesh.position);
+    holeMesh.position.y = -0.1 * worldUnitsPerFoot; // Below ground level
+    
+    holeMesh.userData.isHole = true;
+    scene.add(holeMesh);
+    
+    console.log(`🕳️ Created hole at pin position (${holeMesh.position.x.toFixed(2)}, ${holeMesh.position.z.toFixed(2)})`);
+    console.log(`📍 Created ${pin.difficulty} pin at world pos (${pinMesh.position.x.toFixed(2)}, ${pinMesh.position.z.toFixed(2)}) for ${remainingYards}yd remaining`);
     return pinMesh;
   }
 
@@ -597,9 +602,8 @@ export class CourseFeatureRenderer {
         child.userData.isWater ||
         child.userData.isRough ||
         child.userData.isTerrain ||
-        child.userData.isLandingZone ||
-        child.userData.isDogleg ||
-        child.userData.isPinIndicator
+        child.userData.isPinIndicator ||
+        child.userData.isHole
       )
     );
     

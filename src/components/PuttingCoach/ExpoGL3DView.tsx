@@ -23,6 +23,7 @@ import { SceneryManager } from './Scenery/SceneryManager';
 import { GolfPhysics } from './Physics/GolfPhysics';
 import { HoleTerrainRenderer } from './Terrain/HoleTerrainRenderer';
 import { TerrainSystem } from './Terrain/TerrainSystem';
+// SimpleGreenSystem removed - clean slate
 
 interface PuttingData {
   distance: number;
@@ -184,35 +185,36 @@ export default function ExpoGL3DView({
       ring.renderOrder = 2;
       scene.add(ring);
 
-      // ALWAYS create flagstick and flag
-      const flagstickHeight = mode === 'swing' && distanceFeet > 100 ? 6 : 3.5;
-      const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
-      const flagstickMaterial = new THREE.MeshStandardMaterial({
-        color: 0x333333,
-        metalness: 0.3,
-        roughness: 0.7,
-      });
-      const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
-      flagstick.position.set(0, flagstickHeight / 2, holeZ);
-      flagstick.userData.isFlagstick = true;
-      flagstick.castShadow = true;
-      scene.add(flagstick);
+      // Skip flagstick and flag creation in swing mode - CourseFeatureRenderer handles this
+      if (mode !== 'swing') {
+        const flagstickHeight = 3.5;
+        const flagstickGeometry = new THREE.CylinderGeometry(0.02, 0.02, flagstickHeight, 8);
+        const flagstickMaterial = new THREE.MeshStandardMaterial({
+          color: 0x333333,
+          metalness: 0.3,
+          roughness: 0.7,
+        });
+        const flagstick = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
+        flagstick.position.set(0, flagstickHeight / 2, holeZ);
+        flagstick.userData.isFlagstick = true;
+        flagstick.castShadow = true;
+        scene.add(flagstick);
 
-      // Create flag - scale based on distance for visibility
-      const flagScale = mode === 'swing' && distanceFeet > 100 ? 2.0 : 1.0;
-      const flagWidth = 1.2 * flagScale;
-      const flagHeight = 0.8 * flagScale;
-      const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
-      const flagMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff0000,
-        side: THREE.DoubleSide,
-        emissive: 0xff0000,
-        emissiveIntensity: 0.15,
-      });
-      const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-      flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
-      flag.userData.isFlag = true;
-      scene.add(flag);
+        // Create flag
+        const flagWidth = 1.2;
+        const flagHeight = 0.8;
+        const flagGeometry = new THREE.PlaneGeometry(flagWidth, flagHeight);
+        const flagMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+          side: THREE.DoubleSide,
+          emissive: 0xff0000,
+          emissiveIntensity: 0.15,
+        });
+        const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+        flag.position.set(flagWidth / 2, flagstickHeight - flagHeight / 2, holeZ);
+        flag.userData.isFlag = true;
+        scene.add(flag);
+      }
 
       // Store hole position globally
       (window as any).currentHolePosition = { x: 0, y: 0.01, z: holeZ };
@@ -305,22 +307,10 @@ export default function ExpoGL3DView({
       if (courseHole) {
         HoleTerrainRenderer.createHoleTerrain(scene, courseHole, 'swing');
       }
-      return;
+      // Don't return early - let green creation logic execute
     }
 
-    // Putt mode: create proper green around hole
-    if (courseHole && puttingData.holeDistance <= 100) {
-      // We're putting on a course hole - create the JSON-based green
-      console.log('🎯 Putt mode on course hole - creating JSON green');
-      HoleTerrainRenderer.removeAllTerrain(scene);
-      HoleTerrainRenderer.createHoleGreen(scene, courseHole);
-    } else {
-      // Practice putting mode: keep legacy adaptive green sizing
-      const updateGreenSize = (window as any).updateGreenSize;
-      if (updateGreenSize) {
-        updateGreenSize(puttingData.holeDistance);
-      }
-    }
+    // ALL GREEN CREATION REMOVED - CLEAN SLATE
   }, [gameMode, puttingData.holeDistance, puttingData.swingHoleYards, courseHole]);
 
   // Add automatic camera rotation (can be disabled when user interacts)
@@ -343,11 +333,14 @@ export default function ExpoGL3DView({
     if (showCourseFeatures && courseHole) {
       console.log('🌿 Re-rendering course features for ball progression - hole:', courseHole.number);
       CourseFeatureRenderer.renderCourseFeatures(scene, courseHole, currentPin, swingChallengeProgress);
+      
+      // Green is now created by CourseFeatureRenderer.renderPinIndicator() at exact pin position
+      // No additional green creation needed here
     } else {
       // Remove course features when not needed
       CourseFeatureRenderer.removeCourseFeatures(scene);
     }
-  }, [showCourseFeatures, courseHole, currentPin, swingChallengeProgress]);
+  }, [showCourseFeatures, courseHole, currentPin, swingChallengeProgress, gameMode]);
 
   // Update world positioning when ball progresses (ball stays at reference point, world moves)
   useEffect(() => {
@@ -376,6 +369,8 @@ export default function ExpoGL3DView({
           remainingYards,
           gameMode
         );
+
+        // Green stays fixed at hole position - no updates needed
       }
       
       // Update camera for remaining distance (not total progression)
@@ -614,16 +609,17 @@ export default function ExpoGL3DView({
 
     // Slope overlay completely removed - no white glow effects
 
+    // Simple green system - no initialization needed
+
     // Create terrain: rectangular tee box + fairway when in swing mode,
     // classic circular green when in putt mode.
     const isSwingChallenge = gameMode === 'swing' || (puttingData.swingHoleYards && puttingData.swingHoleYards > 0);
     
-    // In swing mode, build proper tee/fairway/rough corridor. Keep a hidden
-    // tiny green mesh so legacy code paths that reference it remain safe.
+    let green: THREE.Mesh | null = null;
     let greenRadius = Math.max(8, puttingData.holeDistance / 8);
-    let green: THREE.Mesh;
+
     if (isSwingChallenge && courseHole) {
-      // Remove any previous terrain circles
+      // SWING MODE: Remove old terrain, create course elements, render green at hole
       HoleTerrainRenderer.removeAllTerrain(scene);
 
       // Ensure broad ground so the fairway doesn't float in sky
@@ -638,31 +634,16 @@ export default function ExpoGL3DView({
       backgroundRing.userData.isScenery = true;
       scene.add(backgroundRing);
 
-      // Create full hole terrain
-      HoleTerrainRenderer.createHoleTerrain(scene, courseHole, 'swing');
-
-      // Create a minimal, invisible green to satisfy legacy references
-      greenRadius = 8;
-      const hiddenGeometry = new THREE.CircleGeometry(greenRadius, 32);
-      const hiddenMaterial = new THREE.MeshStandardMaterial({ color: 0x3a7d3a, transparent: true, opacity: 0.0 });
-      green = new THREE.Mesh(hiddenGeometry, hiddenMaterial);
-      green.rotation.x = -Math.PI / 2;
-      green.position.y = -0.5; // keep it out of sight
-      green.userData.isGreen = true;
-      scene.add(green);
+      // Create hole terrain (tee, fairway, rough) but NO green
+      const terrainElements = HoleTerrainRenderer.createHoleTerrain(scene, courseHole, 'swing');
+      
+      // NO GREEN CREATION - CLEAN SLATE
+      greenRadius = 12; // Standard for swing mode
+      green = null; // No green created
     } else {
-      const circleGeometry = new THREE.CircleGeometry(greenRadius, 64);
-      const circleMaterial = new THREE.MeshStandardMaterial({
-        color: 0x4caf50,
-        roughness: 0.8,
-        metalness: 0.0,
-      });
-      green = new THREE.Mesh(circleGeometry, circleMaterial);
-      green.rotation.x = -Math.PI / 2;
-      green.position.y = 0;
-      green.receiveShadow = true;
-      green.userData.isGreen = true;
-      scene.add(green);
+      // NO GREEN CREATION - CLEAN SLATE
+      greenRadius = Math.max(8, puttingData.holeDistance / 8);
+      green = null; // No green created
     }
     
     // Store green radius globally (used by some visualizers)
@@ -695,7 +676,7 @@ export default function ExpoGL3DView({
     };
 
     // Store references - green never changes, only indicators change
-    (window as any).greenMesh = green; // Green stays the same always
+    (window as any).greenMesh = green; // May be undefined in swing mode by design
     (window as any).createSlopeIndicators = createSlopeIndicators;
 
     // IMPORTANT: Don't create slope indicators in swing mode
@@ -999,17 +980,18 @@ export default function ExpoGL3DView({
       fringe.userData.isFringe = true;
       scene.add(fringe);
 
-      const fairwayGeometry = new THREE.RingGeometry(12, 20, 32);
-      const fairwayMaterial = new THREE.MeshLambertMaterial({
-        color: 0x228b22,
-        transparent: true,
-        opacity: 0.7,
-      });
-      const fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-      fairway.rotation.x = -Math.PI / 2;
-      fairway.position.y = -0.02;
-      fairway.userData.isFairway = true;
-      scene.add(fairway);
+      // Fairway ring disabled
+      // const fairwayGeometry = new THREE.RingGeometry(12, 20, 32);
+      // const fairwayMaterial = new THREE.MeshLambertMaterial({
+      //   color: 0x228b22,
+      //   transparent: true,
+      //   opacity: 0.7,
+      // });
+      // const fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
+      // fairway.rotation.x = -Math.PI / 2;
+      // fairway.position.y = -0.02;
+      // fairway.userData.isFairway = true;
+      // scene.add(fairway);
     }
 
     // Create realistic golf ball with professional dimpled texture
@@ -1724,15 +1706,17 @@ export default function ExpoGL3DView({
       return { x: 0, y: 0.01, z: holeZ };
     };
 
-    // Green size update function - simplified to avoid fragmentation
+    // Green size update function - completely disabled in swing mode to prevent unwanted green creation
     const updateGreenSize = (newHoleDistanceFeet: number) => {
-      console.log(`🌱 Green size update called: ${newHoleDistanceFeet}ft`);
-      // Simplified - no complex terrain updates to avoid fragmentation
+      console.log(`🌱 Green size update called: ${newHoleDistanceFeet}ft - BLOCKED in swing mode`);
+      // DO NOT call TerrainSystem.updateGreenSize - it creates unwanted green circles
+      // The hole green is created separately by HoleTerrainRenderer and anchored to the pin
     };
     // Store globally for updates
     (window as any).updateHolePosition = updateHolePosition;
     (window as any).updateGreenSize = updateGreenSize;
     (window as any).currentHolePosition = currentHolePosition;
+    (window as any).currentGameMode = gameMode; // Store current game mode to prevent unwanted green creation
     
     // Ball progression now handled by useEffect - no global functions needed
 

@@ -167,51 +167,7 @@ export class TerrainSystem {
   /**
    * Create beautiful putting green around the hole (for approach shots)
    */
-  static createPuttingGreenAroundHole(
-    scene: THREE.Scene,
-    holePosition: THREE.Vector3,
-    greenRadius: number = 8
-  ): THREE.Mesh {
-    // Remove any existing putting green
-    const existingGreen = scene.children.find(child => child.userData?.isPuttingGreen);
-    if (existingGreen) {
-      scene.remove(existingGreen);
-      if ((existingGreen as THREE.Mesh).geometry) (existingGreen as THREE.Mesh).geometry.dispose();
-      if ((existingGreen as THREE.Mesh).material) {
-        const material = (existingGreen as THREE.Mesh).material;
-        if (Array.isArray(material)) {
-          material.forEach(m => m.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-    }
-
-    // Create beautiful putting green geometry
-    const greenGeometry = new THREE.CircleGeometry(greenRadius, 64);
-    
-    // Create premium putting green texture
-    const greenTexture = TerrainSystem.createPremiumGrassTexture();
-    greenTexture.wrapS = greenTexture.wrapT = THREE.RepeatWrapping;
-    greenTexture.repeat.set(2, 2); // Fine texture repeat for putting green
-    
-    const greenMaterial = new THREE.MeshStandardMaterial({
-      map: greenTexture,
-      color: 0x228B22, // Rich green color
-      roughness: 0.3, // Smoother for putting green
-      metalness: 0.0,
-    });
-
-    const puttingGreen = new THREE.Mesh(greenGeometry, greenMaterial);
-    puttingGreen.rotation.x = -Math.PI / 2;
-    puttingGreen.position.set(holePosition.x, holePosition.y - 0.01, holePosition.z);
-    puttingGreen.receiveShadow = true;
-    puttingGreen.userData.isPuttingGreen = true;
-    scene.add(puttingGreen);
-
-    console.log(`🌱 Created beautiful putting green around hole at Z=${holePosition.z.toFixed(2)}`);
-    return puttingGreen;
-  }
+  // createPuttingGreenAroundHole method REMOVED - CLEAN SLATE
 
   /**
    * Create complete terrain setup for a game mode
@@ -246,14 +202,8 @@ export class TerrainSystem {
       side: THREE.DoubleSide,
     });
 
-    // Create green mesh
-    const green = new THREE.Mesh(greenData.geometry, greenMaterial);
-    green.rotation.x = -Math.PI / 2; // Rotate to lie flat
-    green.position.y = 0;
-    green.receiveShadow = true;
-    green.castShadow = false;
-    green.userData.isGreen = true;
-    scene.add(green);
+    // GREEN CREATION REMOVED - CLEAN SLATE
+    const green = null as any; // No green created
 
     // Store green radius globally for trajectory calculations
     (window as any).currentGreenRadius = greenData.radius;
@@ -386,6 +336,12 @@ export class TerrainSystem {
     renderer?: THREE.WebGLRenderer,
     gameMode: 'putt' | 'swing' = 'putt'
   ): void {
+    // CRITICAL: Do not create terrain in swing mode - it creates unwanted green circles
+    if (gameMode === 'swing') {
+      console.log(`🚫 TerrainSystem.updateGreenSize BLOCKED in swing mode (${newHoleDistanceFeet}ft)`);
+      return;
+    }
+    
     // Remove existing terrain
     TerrainSystem.removeExistingTerrain(scene);
 
@@ -499,7 +455,9 @@ export class TerrainSystem {
    */
   static initializeGlobalFunctions(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): void {
     (window as any).updateGreenSize = (newHoleDistanceFeet: number) => {
-      TerrainSystem.updateGreenSize(scene, newHoleDistanceFeet, renderer);
+      // Determine game mode from global state to prevent unwanted green creation
+      const gameMode = (window as any).currentGameMode || 'putt';
+      TerrainSystem.updateGreenSize(scene, newHoleDistanceFeet, renderer, gameMode);
     };
   }
 }

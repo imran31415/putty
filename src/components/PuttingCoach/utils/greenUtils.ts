@@ -42,22 +42,9 @@ export const createCourseGround = (isSwing: boolean) => {
   return mesh;
 };
 
-// Long fairway ribbon downrange for framing the hole (swing mode only)
+// Long fairway ribbon downrange for framing the hole (swing mode only) - DISABLED
 export const createFairwayRibbon = (isSwing: boolean) => {
-  if (!isSwing) return null;
-  const tex = createFairwayTexture();
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(5, 40);
-
-  const mat = new THREE.MeshLambertMaterial({ map: tex, color: 0x3a7d3a });
-  const width = 80; // corridor width
-  const length = 800; // extend far down the hole
-  const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(width, length, 1, 1), mat);
-  ribbon.rotation.x = -Math.PI / 2;
-  ribbon.position.set(0, -0.035, -length / 2 + 4); // start near tee and extend forward
-  ribbon.receiveShadow = true;
-  ribbon.userData.isScenery = true;
-  return ribbon;
+  return null; // Disabled fairway ribbon
 };
 
 // CENTRALIZED SCALING FUNCTION - Used by ALL distance calculations
