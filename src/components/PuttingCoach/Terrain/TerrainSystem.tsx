@@ -327,17 +327,19 @@ export class TerrainSystem {
   static createCourseGround(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): THREE.Mesh {
     const groundTexture = TerrainSystem.createFairwayTexture();
     groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(40, 40);
+    // Larger repeat for a much larger ground plane
+    groundTexture.repeat.set(200, 200);
     if (renderer) {
       groundTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     }
 
-    const groundMaterial = new THREE.MeshLambertMaterial({ 
-      map: groundTexture, 
-      color: 0x3a7d3a 
+    const groundMaterial = new THREE.MeshLambertMaterial({
+      map: groundTexture,
+      color: 0x3a7d3a,
     });
-    
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 800, 1, 1), groundMaterial);
+
+    // Extremely large ground plane to fill the horizon
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000, 1, 1), groundMaterial);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.03;
     ground.receiveShadow = true;

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 export class GolfPhysics {
   // Master coordinate system constants
   static readonly TEE_WORLD_Z = 4;
-  static readonly WORLD_UNITS_PER_FOOT = 0.05; // Consistent scaling for swing mode
+  static readonly WORLD_UNITS_PER_FOOT = 0.15; // Increased scaling for better course layout
   static readonly BALL_HEIGHT = 0.08;
 
   /**

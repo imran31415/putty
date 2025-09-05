@@ -136,9 +136,9 @@ export class CourseFeatureRenderer {
     const length = hazard.dimensions.length;
     const depth = hazard.dimensions.depth || 2;
     
-    // Use proper scaling for swing mode vs putting mode
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    // Use larger scaling for better course layout spacing
+    // Use unified world scale across systems
+    const worldUnitsPerFoot = 0.05;
     
     // Create realistic bunker shape
     const geometry = new THREE.CylinderGeometry(
@@ -164,14 +164,14 @@ export class CourseFeatureRenderer {
     // Position relative to current ball position (ball stays at Z=4, world moves)
     const hazardDistanceYards = Math.abs(hazard.position.y);
     const currentBallYards = (window as any).currentBallProgressionYards || 0;
-    
+
     // Calculate where bunker appears relative to ball's current view
     const relativeYards = hazardDistanceYards - currentBallYards;
     const relativeFeet = relativeYards * 3;
     const bunkerZ = 4 - relativeFeet * worldUnitsPerFoot; // Relative to ball at Z=4
     
     bunker.position.set(
-      hazard.position.x * worldUnitsPerFoot / 6, // Lateral offset
+      (hazard.position.x * 3) * worldUnitsPerFoot, // x in yards -> feet -> world
       -depth * worldUnitsPerFoot / 8, // Slightly below ground
       bunkerZ
     );
@@ -195,8 +195,7 @@ export class CourseFeatureRenderer {
     const width = hazard.dimensions.width;
     const length = hazard.dimensions.length;
 
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
 
     const geometry = new THREE.PlaneGeometry(
       (width * worldUnitsPerFoot) / 3,
@@ -217,13 +216,14 @@ export class CourseFeatureRenderer {
     const water = new THREE.Mesh(geometry, material);
     water.rotation.x = -Math.PI / 2;
 
-    // Position using absolute world coordinates from tee (same system as hole)
+    // Position relative to current ball coordinates (ball at Z=4)
     const hazardDistanceYards = Math.abs(hazard.position.y);
-    const hazardDistanceFeet = hazardDistanceYards * 3;
-    const hazardZ = 4 - hazardDistanceFeet * worldUnitsPerFoot;
+    const currentBallYards = (window as any).currentBallProgressionYards || 0;
+    const relativeFeet = (hazardDistanceYards - currentBallYards) * 3;
+    const hazardZ = 4 - relativeFeet * worldUnitsPerFoot;
 
     water.position.set(
-      (hazard.position.x * worldUnitsPerFoot) / 6, 
+      (hazard.position.x * 3) * worldUnitsPerFoot, 
       0.05, 
       hazardZ
     );
@@ -242,8 +242,7 @@ export class CourseFeatureRenderer {
     const width = hazard.dimensions.width;
     const length = hazard.dimensions.length;
 
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
 
     const geometry = new THREE.PlaneGeometry(
       (width * worldUnitsPerFoot) / 5,
@@ -266,13 +265,14 @@ export class CourseFeatureRenderer {
     const rough = new THREE.Mesh(geometry, material);
     rough.rotation.x = -Math.PI / 2;
 
-    // Position using absolute world coordinates
+    // Position relative to current ball coordinates (ball at Z=4)
     const hazardDistanceYards = Math.abs(hazard.position.y);
-    const hazardDistanceFeet = hazardDistanceYards * 3;
-    const hazardZ = 4 - hazardDistanceFeet * worldUnitsPerFoot;
+    const currentBallYards = (window as any).currentBallProgressionYards || 0;
+    const relativeFeet = (hazardDistanceYards - currentBallYards) * 3;
+    const hazardZ = 4 - relativeFeet * worldUnitsPerFoot;
 
     rough.position.set(
-      (hazard.position.x * worldUnitsPerFoot) / 6, 
+      (hazard.position.x * 3) * worldUnitsPerFoot, 
       0.03, 
       hazardZ
     );
@@ -292,8 +292,7 @@ export class CourseFeatureRenderer {
     const length = terrain.dimensions.length;
     const height = terrain.dimensions.height;
     
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
     
     let geometry: THREE.BufferGeometry;
     let material: THREE.Material;
@@ -342,13 +341,13 @@ export class CourseFeatureRenderer {
     
     const terrainMesh = new THREE.Mesh(geometry, material);
     
-    // Position using absolute world coordinates from tee (same system as hole)
+    // Position relative to current ball position
     const terrainDistanceYards = Math.abs(terrain.position.y);
-    const terrainDistanceFeet = terrainDistanceYards * 3;
-    const terrainZ = 4 - terrainDistanceFeet * worldUnitsPerFoot;
+    const currentBallYards = (window as any).currentBallProgressionYards || 0;
+    const terrainZ = 4 - ((terrainDistanceYards - currentBallYards) * 3) * worldUnitsPerFoot;
     
     terrainMesh.position.set(
-      terrain.position.x * worldUnitsPerFoot / 6,
+      (terrain.position.x * 3) * worldUnitsPerFoot,
       height * worldUnitsPerFoot / 16,
       terrainZ
     );
@@ -366,8 +365,7 @@ export class CourseFeatureRenderer {
    * Render landing zone indicator
    */
   private static renderLandingZone(scene: THREE.Scene, zone: any, index: number): THREE.Mesh {
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
     
     const geometry = new THREE.RingGeometry(
       1.5 * worldUnitsPerFoot, 
@@ -407,10 +405,10 @@ export class CourseFeatureRenderer {
     const zoneMesh = new THREE.Mesh(geometry, material);
     zoneMesh.rotation.x = -Math.PI / 2;
     
-    // Position at absolute distance from tee (same system as hole)
+    // Position relative to current ball position
     const zoneDistanceYards = (zone.start + zone.end) / 2;
-    const zoneDistanceFeet = zoneDistanceYards * 3;
-    const zoneZ = 4 - zoneDistanceFeet * worldUnitsPerFoot;
+    const currentBallYards = (window as any).currentBallProgressionYards || 0;
+    const zoneZ = 4 - ((zoneDistanceYards - currentBallYards) * 3) * worldUnitsPerFoot;
     
     zoneMesh.position.set(0, 0.12, zoneZ);
     zoneMesh.userData.isLandingZone = true;
@@ -425,8 +423,7 @@ export class CourseFeatureRenderer {
    * Render dogleg indicator
    */
   private static renderDogleg(scene: THREE.Scene, bend: any, index: number): THREE.Mesh {
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
     
     const geometry = new THREE.TorusGeometry(
       1.0 * worldUnitsPerFoot, 
@@ -449,7 +446,7 @@ export class CourseFeatureRenderer {
     // Calculate relative position
     const relativeYards = doglegDistanceYards - currentBallYards;
     const relativeFeet = relativeYards * 3;
-    const doglegZ = -relativeFeet * worldUnitsPerFoot; // Relative to ball at Z=0
+    const doglegZ = 4 - relativeFeet * worldUnitsPerFoot; // Relative to ball at Z=4
     
     const doglegMesh = new THREE.Mesh(geometry, material);
     doglegMesh.position.set(
@@ -471,8 +468,7 @@ export class CourseFeatureRenderer {
    * Render pin position indicator
    */
   private static renderPinIndicator(scene: THREE.Scene, pin: PinPosition): THREE.Mesh {
-    const isSwingMode = true; // Assume swing for Augusta
-    const worldUnitsPerFoot = isSwingMode ? 0.05 : 0.25;
+    const worldUnitsPerFoot = 0.05;
     
     const geometry = new THREE.CylinderGeometry(
       0.1 * worldUnitsPerFoot, 
@@ -517,10 +513,11 @@ export class CourseFeatureRenderer {
     const currentHolePos = (window as any).currentHolePosition || { x: 0, y: 0, z: -4 };
     
     const pinMesh = new THREE.Mesh(geometry, material);
+    // pin position values are in yards; convert to feet then to world units
     pinMesh.position.set(
-      currentHolePos.x + (pin.position.x * worldUnitsPerFoot / 12),
+      currentHolePos.x + ((pin.position.x * 3) * worldUnitsPerFoot),
       1 * worldUnitsPerFoot,
-      currentHolePos.z + (pin.position.y * worldUnitsPerFoot / 12)
+      currentHolePos.z + ((pin.position.y * 3) * worldUnitsPerFoot)
     );
     pinMesh.userData.isPinIndicator = true;
     scene.add(pinMesh);

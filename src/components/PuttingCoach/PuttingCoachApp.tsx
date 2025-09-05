@@ -19,6 +19,7 @@ import SwingModeControls from './Controls/SwingModeControls';
 import ClubSelectionModal from './Controls/ClubSelectionModal';
 import { CourseLoader } from '../../services/courseLoader';
 import { GolfHole, PinPosition } from '../../types/game';
+// PuttingHomeScreen removed - using integrated header approach
 import {
   LEVEL_CONFIGS,
   LevelConfig,
@@ -137,6 +138,8 @@ function PuttingCoachAppCore() {
   const [currentCourseHole, setCurrentCourseHole] = useState<GolfHole | null>(null);
   const [currentCoursePin, setCurrentCoursePin] = useState<PinPosition | null>(null);
   const [showCourseFeatures, setShowCourseFeatures] = useState(false);
+
+  // Navigation state removed - using integrated header approach
 
   // User session state
   const [userSession, setUserSession] = useState<UserSession>({
@@ -340,6 +343,26 @@ function PuttingCoachAppCore() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
+
+      {/* Animated PUTTY Header */}
+      <View style={styles.headerContainer}>
+        <View style={styles.logoContainer}>
+          {['P', 'U', 'T', 'T', 'Y'].map((letter, index) => (
+            <Text
+              key={index}
+              style={[
+                styles.logoLetter,
+                {
+                  color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'][index],
+                }
+              ]}
+            >
+              {letter}
+            </Text>
+          ))}
+        </View>
+        <Text style={styles.subtitle}>PUTTING CHALLENGE</Text>
+      </View>
 
       {/* Swing Challenge HUD */}
       {swingChallengeProgress && swingChallengeProgress.isActive && (
@@ -1096,6 +1119,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  headerContainer: {
+    alignItems: 'center',
+    paddingTop: 20,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    zIndex: 1000,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  logoLetter: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginHorizontal: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#B0BEC5',
+    fontWeight: '600',
+    letterSpacing: 2,
   },
   fullScreenScene: {
     flex: 1,

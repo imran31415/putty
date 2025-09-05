@@ -22,8 +22,8 @@ export default function usePuttingControls(): UsePuttingControlsReturn {
   const [holeDistance, setHoleDistance] = useState(8);
   const [aimAngle, setAimAngle] = useState(0);
   const [greenSpeed, setGreenSpeed] = useState(10);
-  const [slopeUpDown, setSlopeUpDown] = useState(0);
-  const [slopeLeftRight, setSlopeLeftRight] = useState(0);
+  const [slopeUpDown, setSlopeUpDown] = useState(2); // Start with slight uphill challenge
+  const [slopeLeftRight, setSlopeLeftRight] = useState(1); // Start with slight right break
 
   const handleDistanceChange = useCallback((increment: number) => {
     setDistance(prev => {

@@ -259,7 +259,7 @@ export class SceneryManager {
   /**
    * Create simple tree sprite
    */
-  private static createSimpleTree(): THREE.Sprite {
+  static createSimpleTree(): THREE.Sprite {
     // Create simple tree texture
     const canvas = document.createElement('canvas');
     canvas.width = 128;

@@ -21,6 +21,8 @@ import { PUTTING_PHYSICS } from '../../constants/puttingPhysics';
 import { CourseFeatureRenderer } from './CourseFeatures/CourseFeatureRenderer';
 import { SceneryManager } from './Scenery/SceneryManager';
 import { GolfPhysics } from './Physics/GolfPhysics';
+import { HoleTerrainRenderer } from './Terrain/HoleTerrainRenderer';
+import { TerrainSystem } from './Terrain/TerrainSystem';
 
 interface PuttingData {
   distance: number;
@@ -167,12 +169,13 @@ export default function ExpoGL3DView({
       hole.renderOrder = 1;
       scene.add(hole);
 
-      // White ring for visibility
+      // White ring for visibility (subtle, non-glowing)
       const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
       const ringMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+        color: 0xdddddd,
         side: THREE.DoubleSide,
-        depthWrite: true,
+        transparent: true,
+        opacity: 0.6,
       });
       const ring = new THREE.Mesh(ringGeometry, ringMaterial);
       ring.rotation.x = -Math.PI / 2;
@@ -296,17 +299,21 @@ export default function ExpoGL3DView({
       });
     }
 
-    const updateGreenSize = (window as any).updateGreenSize;
-    if (!updateGreenSize) return;
-
     if (gameMode === 'swing') {
-      // Restore large green for swing mode
-      updateGreenSize(300); // 300 feet green for swing mode
-    } else {
-      // Use actual hole distance for putt mode
+      // Build realistic swing terrain (tee box + fairway + rough)
+      HoleTerrainRenderer.removeAllTerrain(scene);
+      if (courseHole) {
+        HoleTerrainRenderer.createHoleTerrain(scene, courseHole, 'swing');
+      }
+      return;
+    }
+
+    // Putt mode: keep legacy adaptive green sizing
+    const updateGreenSize = (window as any).updateGreenSize;
+    if (updateGreenSize) {
       updateGreenSize(puttingData.holeDistance);
     }
-  }, [gameMode, puttingData.holeDistance, puttingData.swingHoleYards]);
+  }, [gameMode, puttingData.holeDistance, puttingData.swingHoleYards, courseHole]);
 
   // Add automatic camera rotation (can be disabled when user interacts)
   useEffect(() => {
@@ -352,7 +359,16 @@ export default function ExpoGL3DView({
       console.log(`🏌️ Ball progression: ${ballProgressionYards}yd, remaining: ${remainingYards}yd`);
       console.log(`📍 Ball stays at avatar position, world adjusts to show progression`);
       
-      // Putting green creation now handled by separate putt mode useEffect
+      // Update terrain based on ball progression through hole
+      if (sceneRef.current && courseHole) {
+        HoleTerrainRenderer.updateTerrainForProgression(
+          sceneRef.current,
+          courseHole,
+          ballProgressionYards,
+          remainingYards,
+          gameMode
+        );
+      }
       
       // Update camera for remaining distance (not total progression)
       if (cameraRef.current) {
@@ -439,8 +455,10 @@ export default function ExpoGL3DView({
 
           const ringGeometry = new THREE.RingGeometry(holeRadius, holeRadius + 0.03, 32);
           const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
+            color: 0xdddddd,
             side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.6,
           });
           const ring = new THREE.Mesh(ringGeometry, ringMaterial);
           ring.rotation.x = -Math.PI / 2;
@@ -657,27 +675,61 @@ export default function ExpoGL3DView({
       return new THREE.CanvasTexture(canvas);
     };
 
-    // Simple clean terrain - no complex effects to avoid fragmentation
-    const isSwingChallenge =
-      gameMode === 'swing' || (puttingData.swingHoleYards && puttingData.swingHoleYards > 0);
+    // Create terrain: rectangular tee box + fairway when in swing mode,
+    // classic circular green when in putt mode.
+    const isSwingChallenge = gameMode === 'swing' || (puttingData.swingHoleYards && puttingData.swingHoleYards > 0);
     
-    const greenRadius = isSwingChallenge ? 100 : Math.max(8, puttingData.holeDistance / 8);
-    const greenGeometry = new THREE.CircleGeometry(greenRadius, 64);
-    const greenMaterial = new THREE.MeshStandardMaterial({
-      color: isSwingChallenge ? 0x3a7d3a : 0x4caf50,
-      roughness: 0.8,
-      metalness: 0.0,
-    });
+    // In swing mode, build proper tee/fairway/rough corridor. Keep a hidden
+    // tiny green mesh so legacy code paths that reference it remain safe.
+    let greenRadius = Math.max(8, puttingData.holeDistance / 8);
+    let green: THREE.Mesh;
+    if (isSwingChallenge && courseHole) {
+      // Remove any previous terrain circles
+      HoleTerrainRenderer.removeAllTerrain(scene);
 
-    const green = new THREE.Mesh(greenGeometry, greenMaterial);
-    green.rotation.x = -Math.PI / 2;
-    green.position.y = 0;
-    green.receiveShadow = true;
-    green.userData.isGreen = true;
-    scene.add(green);
+      // Ensure broad ground so the fairway doesn't float in sky
+      const ground = TerrainSystem.createCourseGround(scene);
+      // Add a very large, faint rough ring as background layer beyond fairway
+      const backgroundRing = new THREE.Mesh(
+        new THREE.RingGeometry(300, 600, 64),
+        new THREE.MeshLambertMaterial({ color: 0x2d5a2d, transparent: true, opacity: 0.35 })
+      );
+      backgroundRing.rotation.x = -Math.PI / 2;
+      backgroundRing.position.y = -0.04;
+      backgroundRing.userData.isScenery = true;
+      scene.add(backgroundRing);
+
+      // Create full hole terrain
+      HoleTerrainRenderer.createHoleTerrain(scene, courseHole, 'swing');
+
+      // Create a minimal, invisible green to satisfy legacy references
+      greenRadius = 8;
+      const hiddenGeometry = new THREE.CircleGeometry(greenRadius, 32);
+      const hiddenMaterial = new THREE.MeshStandardMaterial({ color: 0x3a7d3a, transparent: true, opacity: 0.0 });
+      green = new THREE.Mesh(hiddenGeometry, hiddenMaterial);
+      green.rotation.x = -Math.PI / 2;
+      green.position.y = -0.5; // keep it out of sight
+      green.userData.isGreen = true;
+      scene.add(green);
+    } else {
+      const circleGeometry = new THREE.CircleGeometry(greenRadius, 64);
+      const circleMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4caf50,
+        roughness: 0.8,
+        metalness: 0.0,
+      });
+      green = new THREE.Mesh(circleGeometry, circleMaterial);
+      green.rotation.x = -Math.PI / 2;
+      green.position.y = 0;
+      green.receiveShadow = true;
+      green.userData.isGreen = true;
+      scene.add(green);
+    }
     
-    // Store green radius globally
+    // Store green radius globally (used by some visualizers)
     (window as any).currentGreenRadius = greenRadius;
+
+    // Create reference for legacy code (will be cleaned up later)
 
     // Slope overlay removed to prevent white streaks
 
@@ -841,10 +893,10 @@ export default function ExpoGL3DView({
       // Create beautiful yellow trajectory line
       const trajectoryGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const trajectoryMaterial = new THREE.LineBasicMaterial({
-        color: 0xffd700, // Bright gold/yellow color
-        linewidth: 6, // Thicker line
-        transparent: true,
-        opacity: 0.85, // Strong but not overwhelming
+        color: 0xffd700, // Gold color
+        linewidth: 1, // Even thinner line
+        transparent: false, // Remove transparency to eliminate glow
+        opacity: 1.0, // Solid line
       });
 
       trajectoryLine = new THREE.Line(trajectoryGeometry, trajectoryMaterial);
@@ -919,13 +971,13 @@ export default function ExpoGL3DView({
         return;
       }
 
-      // Create aim line with different color (white/light blue)
+      // Create aim line with subtle non-glowing style
       const aimLineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const aimLineMaterial = new THREE.LineBasicMaterial({
-        color: 0x00ffff, // Cyan/light blue color - different from yellow trajectory
-        linewidth: 4,
-        transparent: true,
-        opacity: 0.8,
+        color: 0x0088cc, // Muted blue
+        linewidth: 2,
+        transparent: false, // Avoid additive glow/look
+        opacity: 1.0,
       });
 
       aimLine = new THREE.Line(aimLineGeometry, aimLineMaterial);
@@ -935,7 +987,7 @@ export default function ExpoGL3DView({
     // Store reference for updates
     (window as any).updateAimLineVisualization = updateAimLineVisualization;
 
-    // Create slope visualization overlay - ONLY for putting mode
+    // Create slope visualization overlay - ONLY for putting mode (no bright gradients)
     const createSlopeVisualization = (slopeUpDown: number, slopeLeftRight: number) => {
       // Remove existing slope overlays
       const existingOverlays = scene.children.filter(
@@ -946,88 +998,85 @@ export default function ExpoGL3DView({
       // Don't show any slope visualization in swing mode or swing challenges
       if (gameMode === 'swing' || puttingData.swingHoleYards) return;
 
-      // For putting mode, we keep the existing slope physics but don't add visual overlays
-      // The slopes still affect ball physics, just no visual indicators
+      // For putting mode, we keep the existing slope physics but don't add any visual overlay
+      // Return early to ensure nothing bright is drawn on the green
+      return;
     };
 
     // Store reference for updates
     (window as any).updateSlopeVisualization = createSlopeVisualization;
 
-    // Create realistic rough/fringe areas with enhanced detail
-    const fringeGeometry = new THREE.RingGeometry(8, 12, 64);
+    // Create fringe/fairway rings ONLY for putting mode; skip for swing
+    if (!(gameMode === 'swing' || puttingData.swingHoleYards)) {
+      const fringeGeometry = new THREE.RingGeometry(8, 12, 64);
 
-    // Create simple anime-style rough texture - 2D and performant
-    const createRoughTexture = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; // Low resolution for performance
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d')!;
+      const createRoughTexture = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
 
-      // Anime-style gradient base
-      const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-      gradient.addColorStop(0, '#5fb65f'); // Bright anime green
-      gradient.addColorStop(0.5, '#4a9f4a'); // Medium green
-      gradient.addColorStop(1, '#3d8b3d'); // Darker green
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 256, 256);
+        const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+        gradient.addColorStop(0, '#5fb65f');
+        gradient.addColorStop(0.5, '#4a9f4a');
+        gradient.addColorStop(1, '#3d8b3d');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 256, 256);
 
-      // Add simple anime-style grass tufts - just shapes, no complex iterations
-      ctx.fillStyle = '#4a9f4a';
-      for (let i = 0; i < 15; i++) {
-        const x = Math.random() * 256;
-        const y = Math.random() * 256;
-        // Draw simple triangle tufts
-        ctx.beginPath();
-        ctx.moveTo(x - 3, y);
-        ctx.lineTo(x, y - 8);
-        ctx.lineTo(x + 3, y);
-        ctx.closePath();
-        ctx.fill();
-      }
+        ctx.fillStyle = '#4a9f4a';
+        for (let i = 0; i < 15; i++) {
+          const x = Math.random() * 256;
+          const y = Math.random() * 256;
+          ctx.beginPath();
+          ctx.moveTo(x - 3, y);
+          ctx.lineTo(x, y - 8);
+          ctx.lineTo(x + 3, y);
+          ctx.closePath();
+          ctx.fill();
+        }
 
-      // Add anime-style patches of darker grass
-      for (let i = 0; i < 8; i++) {
-        const x = Math.random() * 256;
-        const y = Math.random() * 256;
-        ctx.fillStyle = 'rgba(50, 100, 50, 0.3)';
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.fill();
-      }
+        for (let i = 0; i < 8; i++) {
+          const x = Math.random() * 256;
+          const y = Math.random() * 256;
+          ctx.fillStyle = 'rgba(50, 100, 50, 0.3)';
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
-      return new THREE.CanvasTexture(canvas);
-    };
+        return new THREE.CanvasTexture(canvas);
+      };
 
-    const roughTexture = createRoughTexture();
-    roughTexture.wrapS = roughTexture.wrapT = THREE.RepeatWrapping;
-    roughTexture.repeat.set(3, 3);
-    roughTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const roughTexture = createRoughTexture();
+      roughTexture.wrapS = roughTexture.wrapT = THREE.RepeatWrapping;
+      roughTexture.repeat.set(3, 3);
+      roughTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-    const fringeMaterial = new THREE.MeshStandardMaterial({
-      map: roughTexture,
-      color: 0x388e3c, // Proper green instead of blue-tinted
-      roughness: 0.9,
-      metalness: 0.0,
-    });
-    const fringe = new THREE.Mesh(fringeGeometry, fringeMaterial);
-    fringe.rotation.x = -Math.PI / 2;
-    fringe.position.y = -0.01;
-    fringe.receiveShadow = true;
-    fringe.userData.isFringe = true; // Mark for updates
-    scene.add(fringe);
+      const fringeMaterial = new THREE.MeshStandardMaterial({
+        map: roughTexture,
+        color: 0x388e3c,
+        roughness: 0.9,
+        metalness: 0.0,
+      });
+      const fringe = new THREE.Mesh(fringeGeometry, fringeMaterial);
+      fringe.rotation.x = -Math.PI / 2;
+      fringe.position.y = -0.01;
+      fringe.receiveShadow = true;
+      fringe.userData.isFringe = true;
+      scene.add(fringe);
 
-    // Add distant fairway background
-    const fairwayGeometry = new THREE.RingGeometry(12, 20, 32);
-    const fairwayMaterial = new THREE.MeshLambertMaterial({
-      color: 0x228b22,
-      transparent: true,
-      opacity: 0.7,
-    });
-    const fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-    fairway.rotation.x = -Math.PI / 2;
-    fairway.position.y = -0.02;
-    fairway.userData.isFairway = true; // Mark for updates
-    scene.add(fairway);
+      const fairwayGeometry = new THREE.RingGeometry(12, 20, 32);
+      const fairwayMaterial = new THREE.MeshLambertMaterial({
+        color: 0x228b22,
+        transparent: true,
+        opacity: 0.7,
+      });
+      const fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
+      fairway.rotation.x = -Math.PI / 2;
+      fairway.position.y = -0.02;
+      fairway.userData.isFairway = true;
+      scene.add(fairway);
+    }
 
     // Create realistic golf ball with professional dimpled texture
     const ballRadius = 0.08; // Keep existing size - don't change physics
@@ -1508,7 +1557,12 @@ export default function ExpoGL3DView({
 
     // CENTRALIZED SCALING FUNCTION - Used by ALL distance calculations
     const getWorldUnitsPerFoot = (holeDistanceFeet: number) => {
-      // Adaptive world units per foot to keep hole visible while maintaining physics accuracy
+      // For swing challenges, use consistent scaling with CourseFeatureRenderer
+      if (gameMode === 'swing') {
+        return 0.15; // Consistent with CourseFeatureRenderer scaling
+      }
+      
+      // Adaptive scaling for putting mode only
       if (holeDistanceFeet <= 10) return 1.0; // 1:1 for short putts
       if (holeDistanceFeet <= 25) return 0.8; // 0.8:1 for medium putts
       if (holeDistanceFeet <= 50) return 0.6; // 0.6:1 for longer putts
@@ -1609,9 +1663,122 @@ export default function ExpoGL3DView({
     (window as any).currentHolePosition = currentHolePosition;
     // Initial hole created
 
-    // Create atmospheric scenery using SceneryManager
+    // Create comprehensive golf course background scenery
+    // 1) Create a massive ground plane first - this is critical for horizon
+    const createMassiveGroundPlane = () => {
+      const groundGeometry = new THREE.PlaneGeometry(8000, 8000, 1, 1);
+      const groundMaterial = new THREE.MeshLambertMaterial({
+        color: 0x3a7d3a, // Golf course green
+        transparent: false,
+      });
+      const massiveGround = new THREE.Mesh(groundGeometry, groundMaterial);
+      massiveGround.rotation.x = -Math.PI / 2;
+      massiveGround.position.y = -0.1; // Slightly below other terrain
+      massiveGround.userData.isScenery = true;
+      scene.add(massiveGround);
+      console.log('🌍 Created massive ground plane for horizon');
+    };
+    createMassiveGroundPlane();
+    
+    // 2) Sky dome backdrop
+    SceneryManager.createSkyDome(scene);
+    
+    // 3) Create rolling hills in the distance - positioned to be visible from camera
+    const createDistantHills = () => {
+      for (let i = 0; i < 12; i++) {
+        const hillGeometry = new THREE.SphereGeometry(200 + Math.random() * 150, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+        const hillMaterial = new THREE.MeshLambertMaterial({
+          color: 0x2d5a2d, // Darker green for hills
+          transparent: false,
+          opacity: 1.0,
+        });
+        const hill = new THREE.Mesh(hillGeometry, hillMaterial);
+        const angle = (i / 12) * Math.PI * 2;
+        const distance = 1000 + Math.random() * 500; // Further back for proper horizon
+        hill.position.set(
+          Math.cos(angle) * distance,
+          0, // Sitting on the ground plane
+          Math.sin(angle) * distance
+        );
+        hill.userData.isScenery = true;
+        scene.add(hill);
+        console.log(`🏔️ Created hill ${i} at distance ${distance.toFixed(0)}`);
+      }
+    };
+    createDistantHills();
+    
+    // 3) Create distant tree clusters around the horizon - more visible positioning
+    const createDistantTreeClusters = () => {
+      for (let i = 0; i < 16; i++) {
+        const treeClusterGroup = new THREE.Group();
+        const angle = (i / 16) * Math.PI * 2;
+        const distance = 400 + Math.random() * 200; // Much closer
+        
+        // Create 2-4 trees per cluster
+        const treesInCluster = 2 + Math.floor(Math.random() * 3);
+        for (let j = 0; j < treesInCluster; j++) {
+          const tree = SceneryManager.createSimpleTree();
+          tree.position.set(
+            (Math.random() - 0.5) * 30,
+            0,
+            (Math.random() - 0.5) * 30
+          );
+          tree.scale.setScalar(8 + Math.random() * 4); // Bigger trees
+          treeClusterGroup.add(tree);
+        }
+        
+        treeClusterGroup.position.set(
+          Math.cos(angle) * distance,
+          0, // On ground level
+          Math.sin(angle) * distance
+        );
+        treeClusterGroup.userData.isScenery = true;
+        scene.add(treeClusterGroup);
+      }
+    };
+    createDistantTreeClusters();
+    
+    // 4) Blimp atmosphere
     const blimpData = SceneryManager.createAtmosphericBlimp(scene);
     (window as any).blimp = blimpData;
+    
+    // 5) Tree lines to frame the fairway in swing mode
+    if (gameMode === 'swing' || puttingData.swingHoleYards) {
+      const leftTrees = SceneryManager.createTreeLine(
+        scene,
+        { x: -50, z: -20 },
+        { x: -50, z: -600 },
+        32
+      );
+      const rightTrees = SceneryManager.createTreeLine(
+        scene,
+        { x: 50, z: -20 },
+        { x: 50, z: -600 },
+        32
+      );
+      (window as any).treeLines = { leftTrees, rightTrees };
+    }
+    
+    // 6) Add some scattered distant buildings/clubhouse - positioned to be visible
+    const createClubhouseBuildings = () => {
+      for (let i = 0; i < 4; i++) {
+        const buildingGeometry = new THREE.BoxGeometry(60, 30, 40);
+        const buildingMaterial = new THREE.MeshLambertMaterial({
+          color: i === 0 ? 0xd4af8c : (i === 1 ? 0xc4a484 : 0xa68b5b), // Varied clubhouse colors
+        });
+        const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+        const angle = (i / 4) * Math.PI * 0.8 + Math.PI * 0.6; // Spread across visible horizon
+        const distance = 600 + i * 100; // Much closer
+        building.position.set(
+          Math.cos(angle) * distance,
+          0, // On ground level
+          Math.sin(angle) * distance
+        );
+        building.userData.isScenery = true;
+        scene.add(building);
+      }
+    };
+    createClubhouseBuildings();
 
     // Store hole update function
     const updateHolePosition = (newHoleDistanceFeet: number) => {
@@ -1636,8 +1803,7 @@ export default function ExpoGL3DView({
 
     // Create simple anime-style sky
 
-    // Create sky dome using SceneryManager
-    const sky = SceneryManager.createSkyDome(scene);
+    // Sky dome removed to clean up background
 
     // NO FOG AT ALL - IT'S BREAKING SWING MODE
     // scene.fog = new THREE.Fog(0xe6f3ff, 30, 80);
@@ -1662,7 +1828,7 @@ export default function ExpoGL3DView({
 
             // Make sure FOV and far plane are correct
             cameraRef.current.fov = 75; // Wide FOV to see more
-            cameraRef.current.far = 1000; // Very far to see distant objects
+            cameraRef.current.far = 5000; // Very far to see distant objects
             cameraRef.current.updateProjectionMatrix();
           }
         } else {
@@ -2905,12 +3071,13 @@ export default function ExpoGL3DView({
     }
   }, [showTrajectory, puttingData]);
 
-  // Handle aim line visualization changes
+  // Handle aim line visualization changes (disabled in swing mode)
   useEffect(() => {
     if ((window as any).updateAimLineVisualization) {
-      (window as any).updateAimLineVisualization(showAimLine, puttingData);
+      const shouldShow = gameMode !== 'swing' && showAimLine && !puttingData.swingHoleYards;
+      (window as any).updateAimLineVisualization(shouldShow, puttingData);
     }
-  }, [showAimLine, puttingData]);
+  }, [showAimLine, puttingData, gameMode]);
 
   // Cleanup
   useEffect(() => {
