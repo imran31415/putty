@@ -14,7 +14,7 @@ import ExpoGL3DView from './ExpoGL3DView';
 import { PuttingPhysics, PuttingResult } from './PuttingPhysics';
 import { SwingPhysics, SwingData, FlightResult } from './SwingPhysics';
 import { getCloseMessage } from '../../utils/messageHelpers';
-import { ClubType, CLUB_DATA, getClubList } from '../../constants/clubData';
+import { ClubType, CLUB_DATA, getClubList, suggestClubForDistance } from '../../constants/clubData';
 import SwingModeControls from './Controls/SwingModeControls';
 import ClubSelectionModal from './Controls/ClubSelectionModal';
 import { CourseLoader } from '../../services/courseLoader';
@@ -167,12 +167,24 @@ function PuttingCoachAppCore() {
     : hookHoleDistance; // Use hook value for practice mode
 
   // Generic course loading function - loads by courseId and sets hole/pin
-  const loadCourseById = async (courseId: string) => {
+  const loadCourseById = async (courseId: string, selector?: { holeNumber?: number; holeId?: string; distanceYards?: number }) => {
     try {
       console.log('🌿 Loading course:', courseId);
       const course = await CourseLoader.loadCourse(courseId);
       if (course && course.holes.length > 0) {
-        const hole = course.holes[0];
+        let hole = course.holes[0];
+        if (selector?.holeId) {
+          hole = course.holes.find(h => h.id === selector.holeId) || hole;
+        } else if (selector?.holeNumber) {
+          hole = course.holes.find(h => h.number === selector.holeNumber) || hole;
+        } else if (selector?.distanceYards) {
+          const target = selector.distanceYards;
+          hole = course.holes.reduce((best, h) => {
+            const bd = Math.abs((best?.distance || 0) - target);
+            const hd = Math.abs(h.distance - target);
+            return hd < bd ? h : best;
+          }, hole);
+        }
         const pin = hole.pinPositions.find(p => p.name === 'Masters Sunday') || hole.pinPositions[0];
         
         setCurrentCourseHole(hole);
@@ -231,9 +243,11 @@ function PuttingCoachAppCore() {
 
         // Ball position handled by ExpoGL3DView useEffect - no manual updates needed
 
-        // Update hole distance for next shot
-        const remainingFeet = updatedProgress.remainingYards * 3;
-        // setHoleDistance(remainingFeet); // This will be handled by the hook
+        // Auto-select suggested club for next shot
+        try {
+          const suggested = suggestClubForDistance(Math.max(1, Math.round(updatedProgress.remainingYards)));
+          setSelectedClub(suggested);
+        } catch {}
 
         // Check if should switch to putt mode
         if (updatedProgress.remainingYards <= 10) {
@@ -343,6 +357,43 @@ function PuttingCoachAppCore() {
   };
 
   const calculatedPower = Math.min(100, Math.max(30, distance * 6));
+
+  // ===== Slingshot Input (swing mode) =====
+  const [slingshotDragging, setSlingshotDragging] = useState(false);
+  const [slingshotStart, setSlingshotStart] = useState<{x:number;y:number}|null>(null);
+  const [slingshotPoint, setSlingshotPoint] = useState<{x:number;y:number}|null>(null);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const MAX_DRAG = 180; // pixels for full power
+
+  const applySlingshotShot = (start: {x:number;y:number}, end: {x:number;y:number}) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const strength = clamp(dist / MAX_DRAG, 0, 1);
+    const power = Math.round(50 + 50 * strength);
+    // Map pull direction to swing params
+    const mappedClubPath = clamp((dx / MAX_DRAG) * 10, -10, 10);
+    const mappedFace = clamp((dx / MAX_DRAG) * 6, -10, 10);
+    const mappedAttack = clamp((-dy / MAX_DRAG) * 6, -6, 6);
+    setSwingPower(power);
+    setClubPath(mappedClubPath);
+    setFaceAngle(mappedFace);
+    setAttackAngle(mappedAttack);
+    handleShot();
+  };
+
+  const getSlingshotUI = () => {
+    if (!slingshotStart || !slingshotPoint) return null;
+    const dx = slingshotPoint.x - slingshotStart.x;
+    const dy = slingshotPoint.y - slingshotStart.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const strength = clamp(dist / MAX_DRAG, 0, 1);
+    const angleRad = Math.atan2(dy, dx);
+    const angleDeg = (angleRad * 180) / Math.PI;
+    const power = Math.round(50 + 50 * strength);
+    return { dx, dy, dist, strength, angleRad, angleDeg, power };
+  };
 
   return (
     <View style={styles.container}>
@@ -465,6 +516,86 @@ function PuttingCoachAppCore() {
 
         {/* Floating PUTT Button with Mode Selector */}
         <View style={styles.floatingPuttContainer}>
+          {/* Slingshot overlay for swing mode */}
+          {gameMode === 'swing' && (
+            <View
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(e: any) => {
+                const { locationX, locationY } = e.nativeEvent;
+                setSlingshotStart({ x: locationX, y: locationY });
+                setSlingshotPoint({ x: locationX, y: locationY });
+                setSlingshotDragging(true);
+              }}
+              onResponderMove={(e: any) => {
+                if (!slingshotDragging) return;
+                const { locationX, locationY } = e.nativeEvent;
+                setSlingshotPoint({ x: locationX, y: locationY });
+              }}
+              onResponderRelease={(e: any) => {
+                if (slingshotDragging && slingshotStart) {
+                  const { locationX, locationY } = e.nativeEvent;
+                  applySlingshotShot(slingshotStart, { x: locationX, y: locationY });
+                }
+                setSlingshotDragging(false);
+                setSlingshotStart(null);
+                setSlingshotPoint(null);
+              }}
+              style={{ position: 'absolute', bottom: 0, left: 0, right: 0, top: -140, justifyContent: 'flex-end', alignItems: 'center' }}
+            >
+              {!slingshotDragging && (
+                <>
+                  {/* Idle ghost target and instruction */}
+                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 160, alignItems: 'center' }}>
+                    <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,213,79,0.35)' }} />
+                    <View style={{ position: 'absolute', top: -18, width: 2, height: 26, backgroundColor: 'rgba(255,213,79,0.35)' }} />
+                  </View>
+                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 110, alignItems: 'center' }}>
+                    <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+                      <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12, textAlign: 'center' }}>Drag to pull back — release to swing</Text>
+                      <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10, textAlign: 'center', marginTop: 2 }}>Horizontal = shape/face • Vertical = attack</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+              {slingshotDragging && slingshotStart && slingshotPoint && (() => {
+                const ui = getSlingshotUI();
+                if (!ui) return null;
+                const lineX = slingshotPoint.x;
+                const lineY = slingshotPoint.y;
+                const originX = slingshotStart.x;
+                const originY = slingshotStart.y;
+                const normDx = ui.dx / Math.max(1, ui.dist);
+                const normDy = ui.dy / Math.max(1, ui.dist);
+                const guideLength = Math.min(ui.dist, MAX_DRAG);
+                const backX = originX + normDx * guideLength;
+                const backY = originY + normDy * guideLength;
+                const powerColor = `rgba(255, 215, 64, ${0.3 + 0.4 * ui.strength})`;
+                return (
+                  <>
+                    {/* Origin */}
+                    <View style={{ position: 'absolute', left: originX - 4, top: originY - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFD54F' }} />
+                    {/* Pull line */}
+                    <View style={{ position: 'absolute', left: Math.min(originX, backX), top: Math.min(originY, backY), width: Math.abs(backX - originX) || 2, height: Math.abs(backY - originY) || 2, backgroundColor: powerColor, borderRadius: 2, opacity: 0.8 }} />
+                    {/* Arrow head */}
+                    <View style={{ position: 'absolute', left: backX - 6, top: backY - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFC107', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
+                    {/* Power ring */}
+                    <View style={{ position: 'absolute', left: originX - 30, top: originY - 30, width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#FFD54F', opacity: 0.25 }} />
+                    <View style={{ position: 'absolute', left: originX - 30, top: originY - 30, width: 60, height: 60, borderRadius: 30, overflow: 'hidden', transform: [{ rotate: `${ui.angleDeg + 90}deg` }] }}>
+                      <View style={{ position: 'absolute', left: 30 - 30, top: 30 - 60, width: 60, height: 60 * ui.strength, backgroundColor: powerColor }} />
+                    </View>
+                    {/* HUD */}
+                    <View style={{ position: 'absolute', left: originX + 14, top: originY - 48, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }}>
+                      <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12 }}>{ui.power}%</Text>
+                      <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10 }}>{ui.angleDeg.toFixed(0)}°</Text>
+                    </View>
+                  </>
+                );
+              })()}
+            </View>
+          )}
+
+          {gameMode !== 'swing' && (
           <View style={styles.puttButtonGroup}>
             <TouchableOpacity
               style={[styles.floatingPuttButton, isPutting && styles.puttButtonDisabled]}
@@ -489,6 +620,22 @@ function PuttingCoachAppCore() {
               <Text style={styles.modeSelectorText}>▼</Text>
             </TouchableOpacity>
           </View>
+          )}
+          {gameMode === 'swing' && !slingshotDragging && (
+            <View style={{ position: 'absolute', bottom: 18, alignItems: 'center', zIndex: 999 }}>
+              <View style={{ flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 16, overflow: 'hidden' }}>
+                <View style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <Text style={{ color: '#9E9E9E', fontWeight: '700', fontSize: 12 }}>🏌️ Swing</Text>
+                </View>
+                <TouchableOpacity
+                  style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#4CAF50' }}
+                  onPress={() => setGameMode('putt')}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>⛳ Putt</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           <View style={styles.modeIndicator}>
             <Text style={styles.modeIndicatorText}>
               {gameMode === 'putt' ? '⛳ Putt Mode' : '🏌️ Swing Mode'}

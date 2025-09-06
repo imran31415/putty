@@ -367,6 +367,67 @@ export class CourseLoader {
             }
           ]
         }
+        ,
+        {
+          id: 'augusta-2-pink-dogwood',
+          number: 2,
+          par: 5,
+          distance: 575,
+          handicap: 10,
+          tees: [
+            { name: 'Masters Tee', position: { x: 0, y: 0, z: 0 }, distance: 575 },
+          ],
+          fairway: {
+            width: 40,
+            length: 575,
+            render: {
+              teeClearanceYards: 30,
+              widthProfile: [ { at: 0, width: 42 }, { at: 300, width: 44 }, { at: 575, width: 40 } ],
+              edgeBands: [ { side: 'both', widthYards: 7 } ],
+              treeLines: [
+                { side: 'left', start: 50, end: 540, count: 24, offsetYards: 9, speciesWeights: { pine: 0.7, oak: 0.3 }, heightRangeFeet: [28, 42], foliage: 'dense' },
+                { side: 'right', start: 50, end: 540, count: 22, offsetYards: 9, speciesWeights: { pine: 1 }, heightRangeFeet: [26, 38], foliage: 'dense' }
+              ],
+              treeBelts: [
+                { side: 'left', start: 60, end: 540, rows: 3, rowSpacingYards: 4, offsetYards: 12, spacingYards: 18, heightRangeFeet: [28, 40], foliage: 'dense', speciesWeights: { pine: 0.8, oak: 0.2 } },
+                { side: 'right', start: 60, end: 540, rows: 3, rowSpacingYards: 4, offsetYards: 12, spacingYards: 18, heightRangeFeet: [26, 38], foliage: 'dense', speciesWeights: { pine: 1 } }
+              ],
+              flowers: [],
+              lod: { maxObjects: 200, aheadYards: 240, behindYards: 80 },
+              seed: 84
+            },
+            bends: [
+              { start: 280, end: 360, direction: 'left', angle: 10, severity: 'slight' }
+            ],
+            elevationProfile: [
+              { distance: 0, elevation: 0, slope: 0 },
+              { distance: 575, elevation: -20, slope: -3.5 }
+            ],
+            landingZones: [
+              { start: 280, end: 330, width: 44, difficulty: 'easy', hazards: [] },
+              { start: 430, end: 520, width: 38, difficulty: 'medium', hazards: [] }
+            ]
+          },
+          green: {
+            surface: { width: 44, length: 34, elevation: -20, greenSpeed: 13 },
+            render: { shape: 'ellipse', radiusXFeet: 24, radiusYFeet: 18, color: 0x3FAE49, fringeWidthFeet: 4 },
+            contours: [ { x: 0, y: 0, elevation: 0 } ],
+            slopes: [ { type: 'right', direction: 90, magnitude: 3, startPoint: { x: -20, y: -10 }, endPoint: { x: 20, y: 10 } } ],
+            fringe: { width: 4, height: 3, texture: 'medium' }
+          },
+          hazards: [
+            { type: 'bunker', position: { x: -28, y: -520, z: 18 }, dimensions: { width: 18, length: 28, depth: 4 }, penalty: 'stroke' },
+            { type: 'bunker', position: { x: 22, y: -440, z: 15 }, dimensions: { width: 16, length: 24, depth: 3 }, penalty: 'stroke' },
+            { type: 'rough', position: { x: -40, y: -300, z: 10 }, dimensions: { width: 18, length: 220, depth: 0 }, penalty: 'distance' }
+          ],
+          terrain: [
+            { type: 'hill', position: { x: -10, y: -260, z: 0 }, dimensions: { width: 120, length: 180, height: 22 }, slope: 3, direction: 0 },
+          ],
+          pinPositions: [
+            { id: 'augusta-2-front-left', name: 'Front Left', position: { x: -10, y: -8, z: 0 }, difficulty: 'medium' },
+            { id: 'augusta-2-back-right', name: 'Back Right', position: { x: 12, y: 10, z: 0 }, difficulty: 'hard' }
+          ]
+        }
       ]
     };
   }

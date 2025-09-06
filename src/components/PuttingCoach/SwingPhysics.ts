@@ -77,7 +77,7 @@ export class SwingPhysics {
     // Convert to m/s for physics calculations
     const ballSpeed = ballSpeedMPH * SWING_CONSTANTS.MPH_TO_MS;
 
-    console.log('🏌️ Launch conditions:', {
+    if (process.env.NODE_ENV !== 'production') console.log('🏌️ Launch conditions:', {
       club: this.swingData.club,
       power: power,
       clubSpeed: clubSpeed.toFixed(1),
@@ -139,7 +139,7 @@ export class SwingPhysics {
     let vy = ballSpeed * Math.sin(launchRad);
     let vz = ballSpeed * Math.cos(launchRad) * Math.cos(directionRad);
 
-    console.log('🚀 Initial velocities:', {
+    if (process.env.NODE_ENV !== 'production') console.log('🚀 Initial velocities:', {
       vx: vx.toFixed(2),
       vy: vy.toFixed(2),
       vz: vz.toFixed(2),
@@ -251,7 +251,7 @@ export class SwingPhysics {
     // Total distance
     const total = carry + rollDistance;
 
-    console.log('🎯 Flight result:', {
+    if (process.env.NODE_ENV !== 'production') console.log('🎯 Flight result:', {
       carry: carry.toFixed(1),
       total: total.toFixed(1),
       targetDistance: this.clubSpec.typicalDistance * (this.swingData.power / 100),

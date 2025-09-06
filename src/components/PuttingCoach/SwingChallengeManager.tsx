@@ -80,7 +80,7 @@ export function processSwingShot(
   progress: SwingChallengeProgress,
   shotResult: SwingShotResult
 ): SwingChallengeProgress {
-  console.log('📢 processSwingShot v3 - FIXED VERSION');
+  if (process.env.NODE_ENV !== 'production') console.log('📢 processSwingShot v3 - FIXED VERSION');
   const shotDistance = shotResult.total || shotResult.carry;
 
   // Check if we've overshot the hole (ball is past the hole)
@@ -92,7 +92,7 @@ export function processSwingShot(
   if (hasOvershot) {
     // Hitting back toward hole/tee - subtract distance from current position
     newPosition = progress.ballPositionYards - shotDistance;
-    console.log(
+    if (process.env.NODE_ENV !== 'production') console.log(
       '🔴 OVERSHOOT LOGIC: ',
       progress.ballPositionYards,
       '-',
@@ -103,7 +103,7 @@ export function processSwingShot(
   } else {
     // Normal shot toward hole - add distance to current position
     newPosition = progress.ballPositionYards + shotDistance;
-    console.log(
+    if (process.env.NODE_ENV !== 'production') console.log(
       '🟢 NORMAL SHOT: ',
       progress.ballPositionYards,
       '+',
@@ -115,6 +115,22 @@ export function processSwingShot(
 
   // Calculate remaining distance (absolute distance to hole)
   let newRemaining = Math.abs(progress.holePositionYards - newPosition);
+
+  // Chip overshoot guardrail: if very close and using a wedge, cap overshoot
+  const isChipClub = shotResult.club === 'sw-chip' || shotResult.club === 'sw' || shotResult.club === 'pw';
+  const wasClose = progress.remainingYards <= 15; // within 45 ft
+  const MAX_CHIP_OVERSHOOT_YARDS = 1.5; // cap to ~4.5 ft past the hole
+  if (!hasOvershot && isChipClub && wasClose) {
+    const projectedOvershoot = newPosition - progress.holePositionYards;
+    if (projectedOvershoot > MAX_CHIP_OVERSHOOT_YARDS) {
+      newPosition = progress.holePositionYards + MAX_CHIP_OVERSHOOT_YARDS;
+      newRemaining = MAX_CHIP_OVERSHOOT_YARDS;
+      console.log('🛡️ Chip overshoot capped:', {
+        originalOvershoot: projectedOvershoot,
+        cappedTo: MAX_CHIP_OVERSHOOT_YARDS,
+      });
+    }
+  }
 
   // Guardrail: Swing shots should not directly hole out.
   // If rounding makes it exactly 0 (or extremely small), leave a short putt instead.
@@ -128,10 +144,10 @@ export function processSwingShot(
     } else {
       newPosition = progress.holePositionYards - MIN_PUTT_REMAINING_YARDS;
     }
-    console.log('🛡️ Swing guardrail applied:', { wasExactlyHole, adjustedRemaining: newRemaining });
+    if (process.env.NODE_ENV !== 'production') console.log('🛡️ Swing guardrail applied:', { wasExactlyHole, adjustedRemaining: newRemaining });
   }
 
-  console.log('🏌️ Swing shot:', {
+  if (process.env.NODE_ENV !== 'production') console.log('🏌️ Swing shot:', {
     stroke: progress.currentStroke + 1,
     distanceHit: shotDistance,
     wasOvershot: hasOvershot,
@@ -160,7 +176,7 @@ export function processSwingShot(
 
   // Check if we should switch to putt mode
   if (newRemaining <= PUTT_MODE_THRESHOLD) {
-    console.log('🎯 Within putting range:', newRemaining, 'yards');
+    if (process.env.NODE_ENV !== 'production') console.log('🎯 Within putting range:', newRemaining, 'yards');
   }
 
   return updatedProgress;

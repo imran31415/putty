@@ -44,7 +44,7 @@ export class CourseFeatureRenderer {
     ballProgressionYards: number = 0,
     gameMode: 'putt' | 'swing' = 'swing'
   ): void {
-    console.log('🏌️ Rendering course features for hole:', hole.number);
+    if (process.env.NODE_ENV !== 'production') console.log('🏌️ Rendering course features for hole:', hole.number);
     
     // Start performance monitoring
     CourseFeatureRenderer.performanceMonitor.startRender();
@@ -434,7 +434,7 @@ export class CourseFeatureRenderer {
     //   CourseFeatureRenderer.renderPinUsingFactory(scene, pin, 0, context);
     // }
     
-    console.log('✨ Course features rendered successfully');
+    if (process.env.NODE_ENV !== 'production') console.log('✨ Course features rendered successfully');
     
     // End performance monitoring and update frame rate
     CourseFeatureRenderer.performanceMonitor.endRender();

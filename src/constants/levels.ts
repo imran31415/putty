@@ -44,6 +44,22 @@ export const SWING_CHALLENGES: LevelConfig[] = [
     },
     sceneTheme: 'golden',
   },
+  {
+    id: 102,
+    type: 'swing',
+    name: 'Augusta National - Pink Dogwood',
+    description: '575yd Par 5 • Slight dogleg left • Reachable in two for long hitters',
+    introText: '🌸 Pink Dogwood: A strategic par 5 with a gentle dogleg left. Position your tee shot to attack the green down the hill.',
+    holeDistance: 575,
+    courseId: 'augusta-hole1-challenge',
+    par: 5,
+    slopeUpDown: -10,
+    slopeLeftRight: 6,
+    greenSpeed: 13,
+    reward: 700,
+    rewardByScore: { eagle: 2000, birdie: 1000, par: 600, bogey: 300, double: 150 },
+    sceneTheme: 'golden',
+  },
 ];
 
 // Combined array for backward compatibility

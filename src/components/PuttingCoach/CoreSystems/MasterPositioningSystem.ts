@@ -86,7 +86,8 @@ export class MasterPositioningSystem {
         worldPosition: new THREE.Vector3(0, 0, 0),
         visible: false,
         scale: 0,
-        reason: `Feature too far: ${distance}yd > ${maxVisibleDistance}yd`
+        reason: `Feature too far: ${distance}yd > ${maxVisibleDistance}yd`,
+        worldUnitsPerFoot,
       };
     }
     
@@ -134,10 +135,10 @@ export class MasterPositioningSystem {
       return this.getWorldUnitsPerFoot(distanceFeet);
     };
     
-    console.log(`🎯 Global positions updated:`);
-    console.log(`   Hole: (${holePosition.x.toFixed(2)}, ${holePosition.y.toFixed(2)}, ${holePosition.z.toFixed(2)})`);
-    console.log(`   Distance: ${context.remainingYards}yd (${remainingFeet}ft)`);
-    console.log(`   Scaling: ${this.getWorldUnitsPerFoot(remainingFeet).toFixed(3)} units/foot`);
+    if (process.env.NODE_ENV !== 'production') console.log(`🎯 Global positions updated:`);
+    if (process.env.NODE_ENV !== 'production') console.log(`   Hole: (${holePosition.x.toFixed(2)}, ${holePosition.y.toFixed(2)}, ${holePosition.z.toFixed(2)})`);
+    if (process.env.NODE_ENV !== 'production') console.log(`   Distance: ${context.remainingYards}yd (${remainingFeet}ft)`);
+    if (process.env.NODE_ENV !== 'production') console.log(`   Scaling: ${this.getWorldUnitsPerFoot(remainingFeet).toFixed(3)} units/foot`);
   }
 
   /**
@@ -205,19 +206,19 @@ export class MasterPositioningSystem {
     const remainingFeet = context.remainingYards * 3;
     const worldUnitsPerFoot = this.getWorldUnitsPerFoot(remainingFeet);
     
-    console.log('📍 === MASTER POSITIONING ANALYSIS ===');
-    console.log(`Context: Ball ${context.ballPositionYards}yd, Hole ${context.holePositionYards}yd, Remaining ${context.remainingYards}yd`);
-    console.log(`Scaling: ${worldUnitsPerFoot.toFixed(3)} world units per foot (for ${remainingFeet}ft)`);
-    console.log(`Positions: Ball (${validation.ballPosition.x}, ${validation.ballPosition.y}, ${validation.ballPosition.z}), Hole (${validation.holePosition.x.toFixed(2)}, ${validation.holePosition.y.toFixed(2)}, ${validation.holePosition.z.toFixed(2)})`);
-    console.log(`Distance: ${validation.actualDistance.toFixed(2)} world units (expected: ${validation.expectedDistance.toFixed(2)})`);
+    if (process.env.NODE_ENV !== 'production') console.log('📍 === MASTER POSITIONING ANALYSIS ===');
+    if (process.env.NODE_ENV !== 'production') console.log(`Context: Ball ${context.ballPositionYards}yd, Hole ${context.holePositionYards}yd, Remaining ${context.remainingYards}yd`);
+    if (process.env.NODE_ENV !== 'production') console.log(`Scaling: ${worldUnitsPerFoot.toFixed(3)} world units per foot (for ${remainingFeet}ft)`);
+    if (process.env.NODE_ENV !== 'production') console.log(`Positions: Ball (${validation.ballPosition.x}, ${validation.ballPosition.y}, ${validation.ballPosition.z}), Hole (${validation.holePosition.x.toFixed(2)}, ${validation.holePosition.y.toFixed(2)}, ${validation.holePosition.z.toFixed(2)})`);
+    if (process.env.NODE_ENV !== 'production') console.log(`Distance: ${validation.actualDistance.toFixed(2)} world units (expected: ${validation.expectedDistance.toFixed(2)})`);
     
     if (validation.valid) {
-      console.log('✅ Positioning validation PASSED');
+      if (process.env.NODE_ENV !== 'production') console.log('✅ Positioning validation PASSED');
     } else {
-      console.log('❌ Positioning validation FAILED:');
-      validation.issues.forEach(issue => console.log(`   - ${issue}`));
+      if (process.env.NODE_ENV !== 'production') console.log('❌ Positioning validation FAILED:');
+      if (process.env.NODE_ENV !== 'production') validation.issues.forEach(issue => console.log(`   - ${issue}`));
     }
-    console.log('📍 === END ANALYSIS ===');
+    if (process.env.NODE_ENV !== 'production') console.log('📍 === END ANALYSIS ===');
   }
 
   /**
