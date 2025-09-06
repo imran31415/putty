@@ -54,13 +54,18 @@ export class CameraControlSystem {
     const { angle, height, radius } = state;
 
     if (gameMode === 'swing' && swingHoleYards) {
-      // Swing mode - high aerial view
+      // Swing mode – zoomed, dynamic view based on distance to hole
       const feet = swingHoleYards * 3;
       const holeZ = 4 - feet * 0.25;
 
-      camera.position.set(0, 80, 20);
-      camera.lookAt(0, 0, holeZ / 2);
-      camera.fov = 75;
+      // Bring camera closer and tighten FOV for more immersive swing view
+      const camY = THREE.MathUtils.clamp(12 + swingHoleYards * 0.12, 22, 48);
+      const camZ = THREE.MathUtils.clamp(8 + swingHoleYards * 0.05, 12, 22);
+      const camFov = THREE.MathUtils.clamp(62 - swingHoleYards * 0.12, 42, 60);
+
+      camera.position.set(0, camY, camZ);
+      camera.lookAt(0, -1.5, holeZ / 3);
+      camera.fov = camFov;
       camera.far = 5000;
       camera.updateProjectionMatrix();
     } else {

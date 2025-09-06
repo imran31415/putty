@@ -110,6 +110,13 @@ export class CourseLoader {
               elevation: 15,
               greenSpeed: 13
             },
+            render: {
+              shape: 'ellipse',
+              radiusXFeet: 20,
+              radiusYFeet: 12,
+              color: 0x3FAE49,
+              fringeWidthFeet: 4
+            },
             contours: [
               { x: 0, y: 0, elevation: 0, slopeX: 0, slopeY: 0 },
               { x: 10, y: 5, elevation: 2, slopeX: 5, slopeY: 3 }
@@ -184,6 +191,27 @@ export class CourseLoader {
           fairway: {
             width: 35,
             length: 445,
+            render: {
+              teeClearanceYards: 25,
+              widthProfile: [ { at: 0, width: 35 }, { at: 250, width: 38 }, { at: 445, width: 32 } ],
+              edgeBands: [ { side: 'both', widthYards: 6 } ],
+              treeLines: [
+                { side: 'left', start: 30, end: 410, count: 18, offsetYards: 8, speciesWeights: { oak: 0.6, pine: 0.4 }, heightRangeFeet: [25, 40], foliage: 'dense' },
+                { side: 'right', start: 30, end: 410, count: 15, offsetYards: 7, speciesWeights: { pine: 1 }, heightRangeFeet: [20, 35], foliage: 'medium' }
+              ],
+              treeBelts: [
+                { side: 'left', start: 40, end: 400, rows: 3, rowSpacingYards: 4, offsetYards: 10, spacingYards: 14, heightRangeFeet: [26, 36], foliage: 'dense', speciesWeights: { pine: 0.7, oak: 0.3 } },
+                { side: 'right', start: 40, end: 400, rows: 3, rowSpacingYards: 4, offsetYards: 10, spacingYards: 16, heightRangeFeet: [24, 34], foliage: 'dense', speciesWeights: { pine: 1 } }
+              ],
+              flowers: [
+                { side: 'left', start: 50, end: 420, offsetYards: 10, spacingYards: 18, radiusFeet: 1.2, colors: [0xFFC0CB, 0xFFD700, 0xFFFFFF] },
+                { side: 'right', start: 50, end: 420, offsetYards: 10, spacingYards: 20, radiusFeet: 1.2, colors: [0xFFD700, 0xFFFFFF, 0xFFC0CB] }
+              ],
+              // Move scatter away from tee to keep the first shot area clear
+              scatter: [ { type: 'bush', area: 'outer', densityPer100Yards: 8, offsetYards: 12, jitterYards: 0, radiusFeetRange: [3, 3], start: 120 } ],
+              lod: { maxObjects: 150, aheadYards: 200, behindYards: 60 },
+              seed: 42
+            },
             bends: [
               {
                 start: 250,
@@ -231,6 +259,13 @@ export class CourseLoader {
               length: 30,
               elevation: 25,
               greenSpeed: 13
+            },
+            render: {
+              shape: 'ellipse',
+              radiusXFeet: 22,
+              radiusYFeet: 15,
+              color: 0x3FAE49,
+              fringeWidthFeet: 4
             },
             contours: [
               { x: 0, y: 0, elevation: 0, slopeX: 0, slopeY: 0 },
@@ -312,14 +347,16 @@ export class CourseLoader {
               name: 'Front Left',
               position: { x: -8, y: -12, z: 1 },
               difficulty: 'medium',
-              notes: 'Safe pin position away from bunkers'
+              notes: 'Safe pin position away from bunkers',
+              greenOverride: { radiusFeet: 18 }
             },
             {
               id: 'augusta-1-back-right',
               name: 'Back Right',
               position: { x: 12, y: 10, z: -1 },
               difficulty: 'hard',
-              notes: 'Dangerous pin near fall-off, requires precise distance control'
+              notes: 'Dangerous pin near fall-off, requires precise distance control',
+              greenOverride: { radiusXFeet: 20, radiusYFeet: 14 }
             },
             {
               id: 'augusta-1-masters-sunday',

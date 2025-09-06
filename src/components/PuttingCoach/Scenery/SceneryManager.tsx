@@ -238,17 +238,12 @@ export class SceneryManager {
     treeGroup.userData.isScenery = true;
 
     for (let i = 0; i < treeCount; i++) {
-      const t = i / (treeCount - 1);
+      const t = i / (Math.max(1, treeCount - 1));
       const x = startPos.x + (endPos.x - startPos.x) * t;
       const z = startPos.z + (endPos.z - startPos.z) * t;
-      
-      // Add some randomness
-      const offsetX = (Math.random() - 0.5) * 4;
-      const offsetZ = (Math.random() - 0.5) * 4;
-      
       const tree = SceneryManager.createSimpleTree();
-      tree.position.set(x + offsetX, 3, z + offsetZ);
-      tree.scale.setScalar(0.8 + Math.random() * 0.4); // Vary tree sizes
+      tree.position.set(x, 3, z);
+      tree.scale.setScalar(1.0);
       treeGroup.add(tree);
     }
 

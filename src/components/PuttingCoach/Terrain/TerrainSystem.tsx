@@ -213,9 +213,9 @@ export class TerrainSystem {
       TerrainSystem.createFringe(scene, greenData.radius, renderer);
       TerrainSystem.createDistantFairway(scene, greenData.radius);
     } else {
-      // Add course ground and fairway ribbon for swing mode
+      // Add course ground only for swing mode (disable ribbon so it doesn't run through the green)
       TerrainSystem.createCourseGround(scene, renderer);
-      TerrainSystem.createFairwayRibbon(scene, renderer);
+      // TerrainSystem.createFairwayRibbon(scene, renderer); // Disabled for consistency with putting mode
     }
 
     return { green, radius: greenData.radius };
@@ -255,7 +255,10 @@ export class TerrainSystem {
    * Create distant fairway background (putting mode only)
    */
   static createDistantFairway(scene: THREE.Scene, greenRadius: number): THREE.Mesh {
-    const fairwayGeometry = new THREE.RingGeometry(greenRadius * 1.5, greenRadius * 2.5, 32);
+    // Make the distant fairway stop farther from the hole so the green area is clearly visible
+    const inner = greenRadius * 2.5;
+    const outer = greenRadius * 4.0;
+    const fairwayGeometry = new THREE.RingGeometry(inner, outer, 32);
     const fairwayMaterial = new THREE.MeshLambertMaterial({
       color: 0x228b22,
       transparent: true,

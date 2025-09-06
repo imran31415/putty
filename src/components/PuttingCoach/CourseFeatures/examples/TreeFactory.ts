@@ -27,8 +27,8 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
   create(scene: THREE.Scene, tree: TreeFeature, index: number, context: RenderContext): THREE.Mesh | null {
     const coursePos = this.createCoursePosition(tree);
     
-    // Trees are decorative, so use more aggressive culling
-    const treeVisibilityRange = { behindBall: 30, aheadOfBall: 100 };
+    // Extend visibility so tree lines are visible much farther downrange
+    const treeVisibilityRange = { behindBall: 120, aheadOfBall: 300 };
     if (!this.isFeatureVisible(coursePos, context, treeVisibilityRange)) {
       const relativePos = CoordinateSystem.getRelativePositionDescription(coursePos, context);
       console.log(`🚫 Skipping tree at ${coursePos.yardsFromTee}yd (${relativePos.description})`);
@@ -72,8 +72,8 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
    * Create tree trunk
    */
   private createTrunk(tree: TreeFeature): THREE.Mesh {
-    const trunkHeight = tree.height * 0.7; // Trunk is 70% of tree height
-    const trunkRadius = tree.height * 0.05; // Proportional to height
+    const trunkHeight = tree.height * 0.9; // Taller trunk for better proportions
+    const trunkRadius = tree.height * 0.06; // Slightly thicker trunk
     
     const geometry = new THREE.CylinderGeometry(
       trunkRadius * CoordinateSystem.WORLD_UNITS_PER_FOOT,
@@ -99,8 +99,9 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
    * Create tree foliage
    */
   private createFoliage(tree: TreeFeature): THREE.Mesh {
-    const foliageHeight = tree.height * 0.4;
-    const foliageRadius = tree.height * 0.3;
+    const foliageHeight = tree.height * 0.6;
+    const foliageRadius = tree.height * 0.45; // Larger canopy so trees feel bigger than avatar
+    const trunkHeight = tree.height * 0.9; // Must match trunk calc for correct vertical placement
     
     let geometry: THREE.BufferGeometry;
     let color: number;
@@ -110,7 +111,7 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
       case 'oak':
         geometry = new THREE.SphereGeometry(
           foliageRadius * CoordinateSystem.WORLD_UNITS_PER_FOOT,
-          12, 8
+          16, 12
         );
         color = 0x228B22; // Forest green
         break;
@@ -118,7 +119,7 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
         geometry = new THREE.ConeGeometry(
           foliageRadius * CoordinateSystem.WORLD_UNITS_PER_FOOT,
           foliageHeight * CoordinateSystem.WORLD_UNITS_PER_FOOT,
-          8
+          10
         );
         color = 0x006400; // Dark green
         break;
@@ -160,7 +161,7 @@ export class TreeFactory extends BaseFeatureFactory<TreeFeature> {
     });
 
     const foliage = new THREE.Mesh(geometry, material);
-    foliage.position.y = (tree.height * 0.8) * CoordinateSystem.WORLD_UNITS_PER_FOOT;
+    foliage.position.y = (trunkHeight + (foliageHeight * 0.5)) * CoordinateSystem.WORLD_UNITS_PER_FOOT;
 
     return foliage;
   }

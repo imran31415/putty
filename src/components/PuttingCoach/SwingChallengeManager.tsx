@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   },
   sideSummaryContainer: {
     position: 'absolute',
-    top: 60,
+    top: 150,
     left: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     borderRadius: 8,

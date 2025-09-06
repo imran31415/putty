@@ -579,7 +579,7 @@ export default function ExpoGL3DView({
     // Set up renderer
     const renderer = new Renderer({ gl });
     renderer.setSize(drawingBufferWidth, drawingBufferHeight);
-    renderer.setClearColor(0x87ceeb); // Sky blue for swing mode
+    renderer.setClearColor(0x8ec9ff); // Softer sky
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -609,11 +609,11 @@ export default function ExpoGL3DView({
     cameraRef.current = camera;
 
     // Enhanced professional lighting setup with realistic golf course lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Slightly reduced for more dramatic shadows
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambientLight);
 
     // Primary sun light (warm daylight)
-    const directionalLight = new THREE.DirectionalLight(0xfff8dc, 1.8); // Warm white sunlight
+    const directionalLight = new THREE.DirectionalLight(0xfff8dc, 1.6); // Warm white sunlight
     directionalLight.position.set(15, 25, 10); // Higher for more natural sun angle
     directionalLight.castShadow = true;
 
@@ -631,7 +631,7 @@ export default function ExpoGL3DView({
     scene.add(directionalLight);
 
     // Sky light fill (cooler tone from sky)
-    const fillLight = new THREE.DirectionalLight(0xe6f3ff, 0.4); // Cool sky blue fill
+    const fillLight = new THREE.DirectionalLight(0xe6f3ff, 0.35); // Cool sky blue fill
     fillLight.position.set(-10, 15, -5);
     scene.add(fillLight);
 
@@ -641,7 +641,7 @@ export default function ExpoGL3DView({
     scene.add(bounceLight);
 
     // Rim light for depth and atmosphere
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.15);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.18);
     rimLight.position.set(0, 8, -20);
     scene.add(rimLight);
 
@@ -667,10 +667,10 @@ export default function ExpoGL3DView({
       // Add a very large, faint rough ring as background layer beyond fairway
       const backgroundRing = new THREE.Mesh(
         new THREE.RingGeometry(300, 600, 64),
-        new THREE.MeshLambertMaterial({ color: 0x2d5a2d, transparent: true, opacity: 0.35 })
+        new THREE.MeshLambertMaterial({ color: 0x2c6e49, transparent: true, opacity: 0.28 })
       );
       backgroundRing.rotation.x = -Math.PI / 2;
-      backgroundRing.position.y = -0.04;
+      backgroundRing.position.y = -0.035;
       backgroundRing.userData.isScenery = true;
       scene.add(backgroundRing);
 
@@ -1698,22 +1698,7 @@ export default function ExpoGL3DView({
     const blimpData = SceneryManager.createAtmosphericBlimp(scene);
     (window as any).blimp = blimpData;
     
-    // 5) Tree lines to frame the fairway in swing mode
-    if (gameMode === 'swing' || puttingData.swingHoleYards) {
-      const leftTrees = SceneryManager.createTreeLine(
-        scene,
-        { x: -50, z: -20 },
-        { x: -50, z: -600 },
-        32
-      );
-      const rightTrees = SceneryManager.createTreeLine(
-        scene,
-        { x: 50, z: -20 },
-        { x: 50, z: -600 },
-        32
-      );
-      (window as any).treeLines = { leftTrees, rightTrees };
-    }
+    // 5) Legacy swing-only tree lines disabled – use CourseFeatureRenderer + JSON for deterministic scenery
     
     // 6) Add some scattered distant buildings/clubhouse - positioned to be visible (removed random boxes)
     const createClubhouseBuildings = () => {

@@ -176,6 +176,62 @@ export interface FairwayLayout {
   bends: FairwayBend[];
   elevationProfile: ElevationPoint[];
   landingZones: LandingZone[];
+  render?: {
+    widthProfile?: Array<{ at: number; width: number }>; // yards from tee
+    edgeBands?: Array<{ side: 'left' | 'right' | 'both'; widthYards: number; start?: number; end?: number }>;
+    treeLines?: Array<{
+      side: 'left' | 'right' | 'both';
+      start?: number;
+      end?: number;   // REQUIRED to stop before green – if omitted, renderer uses full hole length
+      offsetYards?: number;
+      spacingYards?: number;
+      count?: number;
+      jitterYards?: number;
+      heightRangeFeet?: [number, number];
+      foliage?: 'dense' | 'medium' | 'sparse';
+      speciesWeights?: Partial<Record<'oak' | 'pine' | 'maple' | 'palm', number>>;
+    }>;
+    // Dense belts: multiple parallel rows along edges
+    treeBelts?: Array<{
+      side: 'left' | 'right' | 'both';
+      start?: number;
+      end?: number;
+      rows: number;                // number of parallel rows
+      rowSpacingYards?: number;    // lateral spacing between rows
+      offsetYards?: number;        // base offset from fairway edge
+      spacingYards?: number;       // along-the-hole spacing
+      count?: number;              // alternative to spacing
+      heightRangeFeet?: [number, number];
+      foliage?: 'dense' | 'medium' | 'sparse';
+      speciesWeights?: Partial<Record<'oak' | 'pine' | 'maple' | 'palm', number>>;
+    }>;
+    scatter?: Array<{
+      type: 'bush' | 'tree';
+      area?: 'left' | 'right' | 'both' | 'outer';
+      densityPer100Yards: number;
+      offsetYards?: number;
+      jitterYards?: number;
+      heightRangeFeet?: [number, number];
+      radiusFeetRange?: [number, number];
+      speciesWeights?: Partial<Record<'oak' | 'pine' | 'maple' | 'palm', number>>;
+      start?: number;
+      end?: number;
+    }>;
+    // Decorative flowers along edges (deterministic, low-cost)
+    flowers?: Array<{
+      side: 'left' | 'right' | 'both';
+      start?: number; // yards from tee
+      end?: number;   // yards from tee
+      offsetYards?: number; // from fairway edge
+      spacingYards?: number; // spacing along the line
+      count?: number;        // alternative to spacing
+      radiusFeet?: number;   // flower disk radius
+      colors?: number[];     // hex colors to cycle through deterministically
+    }>;
+    teeClearanceYards?: number; // keep spawn area clear around tee
+    lod?: { maxObjects?: number; aheadYards?: number; behindYards?: number };
+    seed?: number;
+  };
 }
 
 export interface FairwayBend {
@@ -216,6 +272,15 @@ export interface GreenComplex {
     height: number;
     texture: 'fine' | 'medium' | 'coarse';
   };
+  // Optional render hints for lightweight, accurate green rendering
+  render?: {
+    shape?: 'circle' | 'ellipse';
+    radiusFeet?: number; // if circle
+    radiusXFeet?: number; // if ellipse
+    radiusYFeet?: number; // if ellipse
+    color?: number; // hex color
+    fringeWidthFeet?: number; // override fringe ring width
+  };
 }
 
 export interface SlopeData {
@@ -247,6 +312,12 @@ export interface PinPosition {
   position: Vector3;
   difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   notes?: string;
+  // Optional per-pin override for local green radius/shape
+  greenOverride?: {
+    radiusFeet?: number;
+    radiusXFeet?: number;
+    radiusYFeet?: number;
+  };
 }
 
 export interface CourseMetadata {

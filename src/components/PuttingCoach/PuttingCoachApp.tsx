@@ -166,11 +166,11 @@ function PuttingCoachAppCore() {
     ? swingChallengeProgress.remainingYards * 3 // Convert yards to feet for challenge
     : hookHoleDistance; // Use hook value for practice mode
 
-  // Course loading function
-  const loadAugustaCourse = async () => {
+  // Generic course loading function - loads by courseId and sets hole/pin
+  const loadCourseById = async (courseId: string) => {
     try {
-      console.log('🌿 Loading Augusta National Tea Olive course...');
-      const course = await CourseLoader.loadCourse('augusta-hole1-challenge');
+      console.log('🌿 Loading course:', courseId);
+      const course = await CourseLoader.loadCourse(courseId);
       if (course && course.holes.length > 0) {
         const hole = course.holes[0];
         const pin = hole.pinPositions.find(p => p.name === 'Masters Sunday') || hole.pinPositions[0];
@@ -179,7 +179,7 @@ function PuttingCoachAppCore() {
         setCurrentCoursePin(pin);
         setShowCourseFeatures(true);
         
-        console.log('✅ Augusta course loaded successfully');
+        console.log('✅ Course loaded successfully');
         console.log('🔍 State set:', {
           courseHole: hole.id,
           pin: pin.name,
@@ -193,7 +193,7 @@ function PuttingCoachAppCore() {
         console.log('   Pin:', pin.name, 'Difficulty:', pin.difficulty);
       }
     } catch (error) {
-      console.error('❌ Error loading Augusta course:', error);
+      console.error('❌ Error loading course:', error);
     }
   };
 
@@ -267,8 +267,12 @@ function PuttingCoachAppCore() {
         // Ball position handled by ExpoGL3DView useEffect - no manual updates needed
 
         if (result.success) {
-          setChallengeComplete(true);
-          console.log('🎯 PUTT SUCCESSFUL - HOLE COMPLETED!');
+          // Delay level completion to allow hole-out animation/FX to finish
+          console.log('🎯 PUTT SUCCESSFUL - delaying level complete to finish animation');
+          setTimeout(() => {
+            setChallengeComplete(true);
+            console.log('🎯 PUTT SUCCESSFUL - HOLE COMPLETED!');
+          }, 1200); // matches drop + popup duration
         }
 
         if (isHoleCompleted(updatedProgress)) {
@@ -403,12 +407,16 @@ function PuttingCoachAppCore() {
                   setTimeout(() => setShowChallengeIntro(false), 6000);
                 }
               } else {
+                // Only one challenge available; return to root and clear scenery
                 setChallengeComplete(false);
                 setIsChallengMode(false);
                 setCurrentLevel(null);
                 setSwingChallengeProgress(null);
                 setGameMode('putt');
                 resetSettings();
+                setCurrentCourseHole(null);
+                setCurrentCoursePin(null);
+                setShowCourseFeatures(false);
               }
             }}
           >
@@ -926,11 +934,11 @@ function PuttingCoachAppCore() {
 
                       console.log('🏌️ Starting swing challenge:', level.name);
 
-                      // Load course data for Augusta National challenge
+                      // Load course data for Augusta National challenge (name-based to avoid hard-coding IDs)
                       console.log('🔍 Challenge level ID:', level.id, 'Name:', level.name);
-                      if (level.id === 103) { // Augusta Tea Olive
-                        console.log('🌿 AUGUSTA CHALLENGE SELECTED! Loading course...');
-                        await loadAugustaCourse();
+                      if (level.courseId) {
+                        console.log('🌿 Loading course by id:', level.courseId);
+                        await loadCourseById(level.courseId);
                       } else {
                         // Clear course features for non-Augusta challenges
                         setCurrentCourseHole(null);
@@ -1354,7 +1362,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 2000,
   },
   completionButton: {

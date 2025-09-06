@@ -21,10 +21,10 @@ export class MaterialFactory {
       return new THREE.MeshStandardMaterial({
         color: variation === 'light' ? 0xE6C2A6 : variation === 'dark' ? 0xC19A6B : 0xD2B48C,
         map: sandTexture,
-        roughness: 0.95,
+        roughness: 0.92,
         metalness: 0.0,
         emissive: 0x654321,
-        emissiveIntensity: 0.05
+        emissiveIntensity: 0.06
       });
     }) as THREE.MeshStandardMaterial;
   }
@@ -52,9 +52,9 @@ export class MaterialFactory {
         color: waterColors[type],
         transparent: true,
         opacity: opacity[type],
-        roughness: 0.1,
-        metalness: 0.9,
-        envMapIntensity: 0.7,
+        roughness: 0.08,
+        metalness: 0.85,
+        envMapIntensity: 0.8,
         side: THREE.DoubleSide
       });
     }) as THREE.MeshStandardMaterial;
@@ -86,10 +86,10 @@ export class MaterialFactory {
       return new THREE.MeshStandardMaterial({
         color: seasonalColors[season],
         map: roughTexture,
-        roughness: 0.95,
+        roughness: 0.93,
         metalness: 0.0,
         emissive: seasonalEmissive[season],
-        emissiveIntensity: 0.05
+        emissiveIntensity: 0.06
       });
     }) as THREE.MeshStandardMaterial;
   }
@@ -119,7 +119,7 @@ export class MaterialFactory {
         color: qualityColors[quality],
         map: fairwayTexture,
         roughness: qualityRoughness[quality],
-        metalness: 0.0
+        metalness: 0.05
       });
     }) as THREE.MeshStandardMaterial;
   }
