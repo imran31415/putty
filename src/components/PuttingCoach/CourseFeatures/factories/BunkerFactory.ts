@@ -52,11 +52,18 @@ export class BunkerFactory extends BaseFeatureFactory<Hazard> {
     const bunkerSize = standardSizes.bunker;
 
     // Create bunker geometry with consistent scaling
+    // Scale bunkers in world units relative to feet to maintain real-world feel
+    const wuPerFt = (featurePosition as any).worldUnitsPerFoot || 1.0;
+    const sizeBoost = Math.max(1.5, 2.0 / Math.max(0.6, wuPerFt)); // Larger at smaller scales
+    const radiusTop = bunkerSize.radius * featurePosition.scale * sizeBoost;
+    const radiusBottom = radiusTop * 0.85;
+    const depth = bunkerSize.depth * featurePosition.scale * Math.min(2.0, sizeBoost * 1.2);
+
     const geometry = new THREE.CylinderGeometry(
-      bunkerSize.radius * featurePosition.scale,     // Top radius scaled by distance
-      bunkerSize.radius * featurePosition.scale * 0.8, // Bottom radius (tapered)
-      bunkerSize.depth * featurePosition.scale,      // Depth scaled by distance
-      Math.max(8, Math.floor(16 * featurePosition.scale)) // Segments based on scale
+      radiusTop,
+      radiusBottom,
+      depth,
+      Math.max(10, Math.floor(18 * featurePosition.scale))
     );
 
     // Use MaterialFactory for consistent sand material
@@ -77,7 +84,7 @@ export class BunkerFactory extends BaseFeatureFactory<Hazard> {
 
     scene.add(mesh);
 
-    console.log(`🏖️ Bunker created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x, pos (${featurePosition.worldPosition.x.toFixed(2)}, ${featurePosition.worldPosition.y.toFixed(2)}, ${featurePosition.worldPosition.z.toFixed(2)})`);
+    console.log(`🏖️ Bunker created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x, wu/ft ${wuPerFt.toFixed(2)}, sizeBoost ${sizeBoost.toFixed(2)}, pos (${featurePosition.worldPosition.x.toFixed(2)}, ${featurePosition.worldPosition.y.toFixed(2)}, ${featurePosition.worldPosition.z.toFixed(2)})`);
 
     return mesh;
   }

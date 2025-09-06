@@ -25,6 +25,7 @@ export interface FeaturePosition {
   visible: boolean;              // Should this feature be rendered
   scale: number;                 // Size multiplier based on distance (1.0 = normal)
   reason: string;                // Why this position/visibility was chosen
+  worldUnitsPerFoot: number;     // Scaling used for this feature (units per foot)
 }
 
 /**
@@ -96,7 +97,8 @@ export class MasterPositioningSystem {
       worldPosition: new THREE.Vector3(worldX, 0, worldZ), // Y = 0 (ground level)
       visible: true,
       scale,
-      reason: `Feature at ${distance}yd with ${scale.toFixed(2)}x scale`
+      reason: `Feature at ${distance}yd with ${scale.toFixed(2)}x scale`,
+      worldUnitsPerFoot
     };
   }
 

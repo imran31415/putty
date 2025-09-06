@@ -114,7 +114,22 @@ export function processSwingShot(
   }
 
   // Calculate remaining distance (absolute distance to hole)
-  const newRemaining = Math.abs(progress.holePositionYards - newPosition);
+  let newRemaining = Math.abs(progress.holePositionYards - newPosition);
+
+  // Guardrail: Swing shots should not directly hole out.
+  // If rounding makes it exactly 0 (or extremely small), leave a short putt instead.
+  const MIN_PUTT_REMAINING_YARDS = 0.5; // ~1.5 ft
+  if (newRemaining <= 0.05) {
+    const wasExactlyHole = newRemaining === 0;
+    newRemaining = MIN_PUTT_REMAINING_YARDS;
+    // Nudge position to be short of the hole toward the ball (no overshoot logic here)
+    if (hasOvershot) {
+      newPosition = progress.holePositionYards + MIN_PUTT_REMAINING_YARDS;
+    } else {
+      newPosition = progress.holePositionYards - MIN_PUTT_REMAINING_YARDS;
+    }
+    console.log('🛡️ Swing guardrail applied:', { wasExactlyHole, adjustedRemaining: newRemaining });
+  }
 
   console.log('🏌️ Swing shot:', {
     stroke: progress.currentStroke + 1,

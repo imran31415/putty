@@ -51,10 +51,12 @@ export class WaterFactory extends BaseFeatureFactory<Hazard> {
     const width = hazard.dimensions.width || 30; // Default 30 yard width
     const length = hazard.dimensions.length || 20; // Default 20 yard length
     
+    const wuPerFt = (featurePosition as any).worldUnitsPerFoot || 1.0;
+    const sizeBoost = Math.max(1.5, 2.0 / Math.max(0.6, wuPerFt));
     const geometry = new THREE.PlaneGeometry(
-      width * featurePosition.scale * 0.1,  // Width scaled by distance
-      length * featurePosition.scale * 0.1, // Length scaled by distance
-      8, 8 // Reasonable segment count
+      width * featurePosition.scale * 0.12 * sizeBoost,  // Width scaled by distance and wu/ft
+      length * featurePosition.scale * 0.12 * sizeBoost, // Length scaled by distance and wu/ft
+      10, 10 // Slightly higher segmentation for larger water
     );
 
     // Use MaterialFactory for consistent water material
@@ -80,7 +82,7 @@ export class WaterFactory extends BaseFeatureFactory<Hazard> {
 
     scene.add(mesh);
 
-    console.log(`💧 Water created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x`);
+    console.log(`💧 Water created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x, wu/ft ${wuPerFt.toFixed(2)}, sizeBoost ${sizeBoost.toFixed(2)}`);
 
     return mesh;
   }

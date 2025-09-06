@@ -51,10 +51,12 @@ export class RoughFactory extends BaseFeatureFactory<Hazard> {
     const width = hazard.dimensions.width || 25; // Default 25 yard width
     const length = hazard.dimensions.length || 15; // Default 15 yard length
     
+    const wuPerFt = (featurePosition as any).worldUnitsPerFoot || 1.0;
+    const sizeBoost = Math.max(1.4, 1.8 / Math.max(0.6, wuPerFt));
     const geometry = new THREE.PlaneGeometry(
-      width * featurePosition.scale * 0.1,  // Width scaled by distance
-      length * featurePosition.scale * 0.1, // Length scaled by distance
-      6, 6 // Reasonable segment count
+      width * featurePosition.scale * 0.12 * sizeBoost,  // Width scaled by distance and wu/ft
+      length * featurePosition.scale * 0.12 * sizeBoost, // Length scaled by distance and wu/ft
+      8, 8 // Slightly higher segmentation for large patches
     );
 
     // Use MaterialFactory for consistent rough material
