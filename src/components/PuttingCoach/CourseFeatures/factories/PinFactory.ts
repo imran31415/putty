@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { BaseFeatureFactory } from './BaseFeatureFactory';
 import { RenderContext, CoordinateSystem } from '../CoordinateSystem';
 import { PinPosition } from '../../../../types/game';
+import { MaterialFactory } from '../MaterialFactory';
+import { UnifiedPositioningSystem } from '../../CoreSystems/UnifiedPositioningSystem';
+import { VisuallyValidatedScaling } from '../../CoreSystems/VisuallyValidatedScaling';
 
 /**
  * Factory for creating pin flags and holes
@@ -11,25 +14,115 @@ export class PinFactory extends BaseFeatureFactory<PinPosition> {
    * Create a pin and hole mesh pair
    */
   create(scene: THREE.Scene, pin: PinPosition, index: number, context: RenderContext): THREE.Mesh | null {
-    // Create the pin flag
-    const pinMesh = this.createPinFlag(pin, context);
-    if (!pinMesh) return null;
-
-    // Create the hole
-    const holeMesh = this.createHole(pin, context);
+    // Use UNIFIED positioning system - no more competing logic!
+    const positioningSystem = UnifiedPositioningSystem.getInstance();
     
+    console.log('📍 Creating pin using UNIFIED positioning system');
+    
+    // Calculate pin position and visibility using unified system
+    const pinCalculation = positioningSystem.calculatePinPosition(pin);
+    
+    if (!pinCalculation.visible) {
+      console.log(`🚫 Pin not visible: ${pinCalculation.reason}`);
+      return null;
+    }
+    
+    console.log(`✅ Pin visible: ${pinCalculation.reason} (scale: ${pinCalculation.scale.toFixed(2)}x)`);
+    
+    // Use VISUALLY VALIDATED scaling system
+    const gameState = positioningSystem.getGameState();
+    const visualScaling = VisuallyValidatedScaling.getInstance();
+    const remainingYards = gameState.remainingYards;
+    
+    // Get visual reference for current distance
+    const visualRef = visualScaling.getVisualReference(remainingYards);
+    console.log(`📏 Visual reference for ${remainingYards}yd: ${visualRef.reference.description}`);
+    
+    // Calculate appropriate pin size based on distance
+    const basePinRadius = 0.1;   // 0.1 foot radius (thin flagstick)
+    const basePinHeight = 8.0;   // 8 feet tall (regulation)
+    const pinSize = visualScaling.calculateFeatureSize(basePinRadius, remainingYards);
+    const pinHeight = visualScaling.calculateFeatureSize(basePinHeight, remainingYards);
+    
+    const pinGeometry = new THREE.CylinderGeometry(
+      pinSize,                                         // Visually validated radius
+      pinSize,                                         // Same radius top/bottom
+      pinHeight,                                       // Visually validated height
+      Math.max(6, Math.floor(12 * pinCalculation.scale)) // Segments based on distance
+    );
+
+    const pinMaterial = MaterialFactory.createPinMaterial(pin.difficulty);
+    
+    // Use unified positioning calculation
+    const pinWorldPos = pinCalculation.worldPosition;
+
+    const pinMesh = this.createMesh(pinGeometry, pinMaterial, pinWorldPos, {
+      isPinIndicator: true,
+      pinDifficulty: pin.difficulty,
+      featureType: 'pin',
+      distanceScale: pinCalculation.scale,
+      castShadow: true,
+      receiveShadow: false
+    });
+
+    // Create hole at same position as pin, but below ground
+    const baseHoleRadius = 0.35;  // 4.25 inches = 0.35 feet (regulation hole)
+    const baseHoleDepth = 0.33;   // 4 inches = 0.33 feet (regulation depth)
+    const holeSize = visualScaling.calculateFeatureSize(baseHoleRadius, remainingYards);
+    const holeDepth = visualScaling.calculateFeatureSize(baseHoleDepth, remainingYards);
+    
+    const holeGeometry = new THREE.CylinderGeometry(
+      holeSize,                                        // Visually validated radius
+      holeSize,                                        // Same radius top/bottom  
+      holeDepth,                                       // Visually validated depth
+      Math.max(8, Math.floor(16 * pinCalculation.scale)) // Segments based on distance
+    );
+
+    const holeMaterial = MaterialFactory.createHoleMaterial();
+    
+    const holeWorldPos = new THREE.Vector3(
+      pinWorldPos.x, // Same X as pin
+      -holeDepth,    // Below ground at calculated depth
+      pinWorldPos.z // Same Z as pin
+    );
+
+    const holeMesh = this.createMesh(holeGeometry, holeMaterial, holeWorldPos, {
+      isHole: true,
+      featureType: 'hole',
+      distanceScale: pinCalculation.scale,
+      castShadow: false,
+      receiveShadow: false
+    });
+
     // Add both to scene
     scene.add(pinMesh);
-    if (holeMesh) {
-      scene.add(holeMesh);
+    scene.add(holeMesh);
+
+    // Global variables are automatically updated by UnifiedPositioningSystem
+    // No manual updates needed - everything is synchronized!
+    
+    console.log(`🎯 Pin/Hole created using VISUALLY VALIDATED system:`);
+    console.log(`   Distance: ${gameState.remainingYards}yd → ${visualRef.reference.description}`);
+    console.log(`   Scaling: ${visualScaling.getWorldUnitsPerYard().toFixed(4)} units/yard (visually validated)`);
+    console.log(`   Pin size: radius=${pinSize.toFixed(3)}, height=${pinHeight.toFixed(3)}`);
+    console.log(`   Hole size: radius=${holeSize.toFixed(3)}, depth=${holeDepth.toFixed(3)}`);
+    console.log(`   Pin world pos: (${pinWorldPos.x.toFixed(2)}, ${pinWorldPos.y.toFixed(2)}, ${pinWorldPos.z.toFixed(2)})`);
+    console.log(`   Hole world pos: (${holeWorldPos.x.toFixed(2)}, ${holeWorldPos.y.toFixed(2)}, ${holeWorldPos.z.toFixed(2)})`);
+    
+    // Verify visual accuracy
+    const worldPositions = positioningSystem.getWorldPositions();
+    const ballToHoleDistance = worldPositions.ball.distanceTo(worldPositions.hole);
+    const validation = visualScaling.validateVisualDistance(ballToHoleDistance, gameState.remainingYards);
+    
+    console.log(`✅ VISUAL validation: ${ballToHoleDistance.toFixed(2)} world units for ${gameState.remainingYards}yd (${validation.errorPercentage.toFixed(1)}% error)`);
+    
+    if (!validation.correct) {
+      console.error(`❌ VISUAL SCALING ERROR: Distance doesn't look right!`);
+      console.error(`   Expected: ${validation.expectedWorldUnits.toFixed(2)} world units`);
+      console.error(`   Actual: ${ballToHoleDistance.toFixed(2)} world units`);
     }
 
-    // Log creation
-    const pinCoursePos: any = { yardsFromTee: 0, lateralYards: pin.position.x, elevationFeet: pin.position.z };
-    const worldPos = CoordinateSystem.getPinWorldPosition(pinCoursePos, context);
-    this.logFeatureCreation('pin', index, worldPos, pinCoursePos, context);
-
-    return pinMesh; // Return pin as primary mesh
+    return pinMesh;
   }
 
   /**
@@ -45,23 +138,21 @@ export class PinFactory extends BaseFeatureFactory<PinPosition> {
     );
 
     // Create material based on pin difficulty
-    const { color, emissiveColor } = this.getPinColors(pin.difficulty);
-    const material = this.createStandardMaterial({
-      color,
-      emissive: emissiveColor,
-      emissiveIntensity: 0.35,
-      metalness: 0.2, // Slight metallic for flagstick
-      roughness: 0.6
-    });
+    const material = MaterialFactory.createPinMaterial(pin.difficulty);
 
-    // Position pin using centralized coordinate system
-    const pinCoursePos: any = {
-      yardsFromTee: 0, // Pin position is relative to hole
-      lateralYards: pin.position.x,
-      elevationFeet: pin.position.z
+    // Position pin using remaining distance (not total hole distance)
+    // In putting mode, pin should be at remaining distance from ball
+    const remainingYards = context.remainingYards || 0;
+    const remainingFeet = remainingYards * 3;
+    
+    // Pin world position: ball is at Z=4, pin is at remaining distance
+    const worldPos = {
+      x: pin.position.x * CoordinateSystem.WORLD_UNITS_PER_FOOT, // Lateral offset
+      y: 0.01, // Ground level
+      z: 4 - (remainingFeet * CoordinateSystem.WORLD_UNITS_PER_FOOT) // Based on remaining distance
     };
     
-    const worldPos = CoordinateSystem.getPinWorldPosition(pinCoursePos, context);
+    console.log(`📍 Pin positioning: ${remainingYards.toFixed(1)}yd remaining → Z=${worldPos.z.toFixed(2)}`);
     
     // Adjust Y position for pin height above ground
     const adjustedWorldPos = {
@@ -93,28 +184,20 @@ export class PinFactory extends BaseFeatureFactory<PinPosition> {
     );
 
     // Create black hole material
-    const holeMaterial = this.createStandardMaterial({
-      color: 0x000000, // Black hole
-      roughness: 1.0,  // No reflection from hole
-      metalness: 0.0
-    });
+    const holeMaterial = MaterialFactory.createHoleMaterial();
 
     // Position hole at same location as pin but below ground
-    const pinCoursePos: any = {
-      yardsFromTee: 0,
-      lateralYards: pin.position.x,
-      elevationFeet: pin.position.z
-    };
+    const remainingYards = context.remainingYards || 0;
+    const remainingFeet = remainingYards * 3;
     
-    const worldPos = CoordinateSystem.getPinWorldPosition(pinCoursePos, context);
-    
-    // Adjust Y position to be below ground level
-    const adjustedWorldPos = {
-      ...worldPos,
-      y: worldPos.y - (0.1 * CoordinateSystem.WORLD_UNITS_PER_FOOT) // Below ground level
+    // Hole world position: same as pin but below ground
+    const holeWorldPos = {
+      x: pin.position.x * CoordinateSystem.WORLD_UNITS_PER_FOOT, // Same lateral offset as pin
+      y: -0.1 * CoordinateSystem.WORLD_UNITS_PER_FOOT, // Below ground level
+      z: 4 - (remainingFeet * CoordinateSystem.WORLD_UNITS_PER_FOOT) // Same Z as pin
     };
 
-    const holeMesh = this.createMesh(holeGeometry, holeMaterial, adjustedWorldPos, {
+    const holeMesh = this.createMesh(holeGeometry, holeMaterial, holeWorldPos, {
       isHole: true,
       featureType: 'hole',
       castShadow: false, // Hole doesn't cast shadows
@@ -125,117 +208,9 @@ export class PinFactory extends BaseFeatureFactory<PinPosition> {
   }
 
   /**
-   * Get pin colors based on difficulty level
+   * Get feature type for LOD system
    */
-  private getPinColors(difficulty: string): { color: number; emissiveColor: number } {
-    switch (difficulty) {
-      case 'easy':
-        return { color: 0x00ff00, emissiveColor: 0x004400 }; // Green
-      case 'medium':
-        return { color: 0xffff00, emissiveColor: 0x444400 }; // Yellow
-      case 'hard':
-        return { color: 0xff8800, emissiveColor: 0x442200 }; // Orange
-      case 'expert':
-        return { color: 0xff0000, emissiveColor: 0x440000 }; // Red
-      default:
-        return { color: 0xffffff, emissiveColor: 0x444444 }; // White
-    }
-  }
-
-  /**
-   * Create animated pin flag (future enhancement)
-   * Could add wind effects, flag waving, etc.
-   */
-  private createAnimatedPinFlag(pin: PinPosition, context: RenderContext): THREE.Group {
-    const group = new THREE.Group();
-    
-    // Create flagstick
-    const flagstick = this.createPinFlag(pin, context);
-    if (flagstick) {
-      group.add(flagstick);
-    }
-    
-    // Create flag cloth (could be animated)
-    const flagGeometry = new THREE.PlaneGeometry(
-      0.8 * CoordinateSystem.WORLD_UNITS_PER_FOOT, // flag width
-      0.5 * CoordinateSystem.WORLD_UNITS_PER_FOOT  // flag height
-    );
-    
-    const { color } = this.getPinColors(pin.difficulty);
-    const flagMaterial = new THREE.MeshStandardMaterial({
-      color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.9
-    });
-    
-    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-    
-    // Position flag at top of flagstick
-    flag.position.set(
-      0.4 * CoordinateSystem.WORLD_UNITS_PER_FOOT, // Offset from flagstick
-      0.8 * CoordinateSystem.WORLD_UNITS_PER_FOOT, // Near top of flagstick
-      0
-    );
-    
-    group.add(flag);
-    
-    return group;
-  }
-
-  /**
-   * Update pin animation (if using animated pins)
-   * Call this in animation loop for flag waving effects
-   */
-  updateAnimation(pinGroup: THREE.Group, deltaTime: number, windStrength: number = 0.5): void {
-    // Find flag mesh in group
-    const flag = pinGroup.children.find(child => 
-      child instanceof THREE.Mesh && 
-      child.geometry instanceof THREE.PlaneGeometry
-    ) as THREE.Mesh;
-    
-    if (flag) {
-      // Simple flag waving animation
-      const time = Date.now() * 0.001;
-      flag.rotation.y = Math.sin(time * 2) * windStrength * 0.2;
-      flag.position.x = 0.4 * CoordinateSystem.WORLD_UNITS_PER_FOOT + 
-                        Math.sin(time * 3) * windStrength * 0.1;
-    }
-  }
-
-  /**
-   * Get regulation hole dimensions
-   */
-  static getRegulationHoleDimensions(): {
-    diameter: number; // inches
-    depth: number;    // inches
-    cupHeight: number; // inches below surface
-  } {
-    return {
-      diameter: 4.25,  // Regulation golf hole diameter
-      depth: 4.0,      // Regulation depth
-      cupHeight: 1.0   // Cup sits 1 inch below surface
-    };
-  }
-
-  /**
-   * Validate pin position is reasonable for golf course
-   */
-  validatePinPosition(pin: PinPosition, holeLength: number): boolean {
-    // Pin should be within reasonable bounds of green
-    const maxLateralOffset = 30; // yards
-    const maxDistanceFromHole = 50; // yards
-    
-    if (Math.abs(pin.position.x) > maxLateralOffset) {
-      console.warn(`Pin position too far lateral: ${pin.position.x} yards`);
-      return false;
-    }
-    
-    if (Math.abs(pin.position.y) > maxDistanceFromHole) {
-      console.warn(`Pin position too far from expected hole location: ${pin.position.y} yards`);
-      return false;
-    }
-    
-    return true;
+  protected getFeatureType(data: PinPosition): string {
+    return 'pin';
   }
 }

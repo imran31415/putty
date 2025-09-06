@@ -370,7 +370,7 @@ export class MaterialFactory {
         weatherMaterial.color.multiplyScalar(effects.colorMultiplier);
       }
       
-      if (effects.roughness !== undefined) {
+      if ('roughness' in effects && effects.roughness !== undefined) {
         weatherMaterial.roughness = effects.roughness;
       }
       

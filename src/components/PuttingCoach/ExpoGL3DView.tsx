@@ -19,6 +19,9 @@ import {
 } from '../../utils/sceneRandomizer';
 import { PUTTING_PHYSICS } from '../../constants/puttingPhysics';
 import { CourseFeatureRenderer } from './CourseFeatures/CourseFeatureRenderer';
+import { PrecisePuttingAnimator } from './Physics/PrecisePuttingAnimator';
+import { PrecisionDistanceCalculator } from './Physics/PrecisionDistanceCalculator';
+import { UnifiedPositioningSystem } from './CoreSystems/UnifiedPositioningSystem';
 import { SceneryManager } from './Scenery/SceneryManager';
 import { GolfPhysics } from './Physics/GolfPhysics';
 import { HoleTerrainRenderer } from './Terrain/HoleTerrainRenderer';
@@ -336,6 +339,14 @@ export default function ExpoGL3DView({
       // Get ball progression from swing challenge progress or default to 0
       const ballProgressionYards = swingChallengeProgress?.ballPositionYards || 0;
       
+      // SIMPLE: Initialize basic course feature rendering (no complex positioning)
+      const isAugustaChallenge = courseHole.id === 'augusta-1-tea-olive';
+      if (isAugustaChallenge) {
+        console.log('🎯 Using SIMPLE course feature rendering...');
+        // Just initialize basic factory system, no complex positioning
+        CourseFeatureRenderer.initialize('quality');
+      }
+      
       CourseFeatureRenderer.renderCourseFeatures(
         scene, 
         courseHole, 
@@ -362,10 +373,29 @@ export default function ExpoGL3DView({
       
       // Ball progression is now passed directly to course features - no global needed
       
-      // CRITICAL FIX: Keep ball at avatar position, move world instead
+      // CRITICAL FIX: Ball should always stay at avatar position (Z=4)
+      // The world (hole, features) moves to show progression, not the ball
       if (ballRef.current) {
-        ballRef.current.position.set(0, 0.08, 4); // Ball stays with avatar
+        ballRef.current.position.set(0, 0.08, 4); // Ball always with avatar
       }
+      
+      // Update hole position to match remaining distance (RESTORE WORKING SCALING)
+      const remainingFeet = remainingYards * 3;
+      const worldUnitsPerFoot = remainingFeet <= 10 ? 1.0 :   // RESTORE original working scaling
+                               remainingFeet <= 25 ? 0.8 :
+                               remainingFeet <= 50 ? 0.6 :
+                               remainingFeet <= 100 ? 0.4 : 0.25;
+      
+      const holeZ = 4 - (remainingFeet * worldUnitsPerFoot);
+      
+      // Update global hole position for putting animation
+      (window as any).currentHolePosition = {
+        x: 0,
+        y: 0.01,
+        z: holeZ
+      };
+      
+      console.log(`🎯 Hole positioned: ${remainingYards.toFixed(1)}yd (${remainingFeet.toFixed(1)}ft) → Z=${holeZ.toFixed(2)}, scale=${worldUnitsPerFoot}`);
       
       console.log(`🏌️ Ball progression: ${ballProgressionYards}yd, remaining: ${remainingYards}yd`);
       console.log(`📍 Ball stays at avatar position, world adjusts to show progression`);
@@ -2033,7 +2063,8 @@ export default function ExpoGL3DView({
         return;
       }
 
-      // Animate player avatar putting stroke with articulated motion
+      // UPDATED: Use distance-based precision for realistic putting
+      console.log('🎯 Using enhanced putting physics with distance-based precision...');
       const updateAnimation = (window as any).updateAvatarAnimation;
       if (updateAnimation) {
         let frameIndex = 0;
@@ -2071,17 +2102,17 @@ export default function ExpoGL3DView({
       const WORLD_DISTANCE = Math.abs(4 - currentHolePos.z); // Dynamic distance from ball start to hole
 
       // User settings
-      const targetDistanceFeet = puttingData.distance; // What user set (e.g., 10ft)
-      const powerPercent = puttingData.power; // What user set (e.g., 75%)
-
-      // Calculate how far ball should actually travel
-      const intendedDistanceFeet = targetDistanceFeet * (powerPercent / 100);
+      const targetDistanceFeet = puttingData.distance; // User-selected distance in feet
+      // Use distance directly for intended travel; avoid implicit halving by power
+      const intendedDistanceFeet = targetDistanceFeet;
 
       // Convert to world units using centralized scaling (CRITICAL FOR PHYSICS ACCURACY)
       const getWorldUnitsPerFoot = (window as any).getWorldUnitsPerFoot;
+      const remainingYardsForScale = (swingChallengeProgress?.remainingYards || (puttingData.holeDistance / 3));
+      const distanceFeetForScale = remainingYardsForScale * 3;
       const worldUnitsPerFoot = getWorldUnitsPerFoot
-        ? getWorldUnitsPerFoot(puttingData.holeDistance)
-        : 1.0;
+        ? getWorldUnitsPerFoot(distanceFeetForScale)
+        : (distanceFeetForScale <= 10 ? 1.0 : distanceFeetForScale <= 25 ? 0.8 : distanceFeetForScale <= 50 ? 0.6 : distanceFeetForScale <= 100 ? 0.4 : 0.25);
       const intendedDistanceWorld = intendedDistanceFeet * worldUnitsPerFoot;
 
       //   holeDistance: puttingData.holeDistance,
@@ -2111,8 +2142,8 @@ export default function ExpoGL3DView({
         speedMultiplier = Math.max(0.25, Math.min(3.0, speedMultiplier));
       }
 
-      // Base speed calculation
-      const baseSpeed = intendedDistanceWorld * 2; // Multiply by 2 to overcome friction
+      // Base speed calculation - FIXED multiplier for accurate distance
+      const baseSpeed = intendedDistanceWorld * 1.1; // Much smaller multiplier for accurate putting
       const initialSpeed = baseSpeed * speedMultiplier;
       const currentPos = { x: startPos.x, y: startPos.y, z: startPos.z };
       const velocity = {
@@ -2270,10 +2301,50 @@ export default function ExpoGL3DView({
 
           // No rim-out animation - ball either goes in or misses cleanly
 
-          // UNIFIED HOLE DETECTION SYSTEM - v9
-          // Use consistent realistic physics for all modes
-          const holeDetectionRadius = PUTTING_PHYSICS.HOLE_DETECTION_RADIUS;
-          const isGoingIn = distanceToHole <= holeDetectionRadius;
+          // UNIFIED HOLE DETECTION SYSTEM - v10 - DISTANCE-BASED PRECISION
+          // Use distance-based precision for realistic putting
+          const remainingYards = swingChallengeProgress?.remainingYards || (puttingData.holeDistance / 3);
+          const distanceFeet = remainingYards * 3;
+          const getWUPF = (feet: number) => {
+            const fn = (window as any).getWorldUnitsPerFoot;
+            if (typeof fn === 'function') return fn(feet);
+            return feet <= 10 ? 1.0 : feet <= 25 ? 0.8 : feet <= 50 ? 0.6 : feet <= 100 ? 0.4 : 0.25;
+          };
+          const worldUnitsPerFoot_anim = getWUPF(distanceFeet);
+          
+          // Get precision requirements based on distance (in FEET)
+          let holeDetectionRadiusFeet: number;
+          let speedThresholdFeetPerSec: number;
+          
+          if (distanceFeet <= 3) {
+            // Very close - extremely precise required
+            holeDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.VERY_CLOSE.detectionRadius;
+            speedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.VERY_CLOSE.speedThreshold;
+          } else if (distanceFeet <= 8) {
+            // Close - high precision required
+            holeDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.CLOSE.detectionRadius;
+            speedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.CLOSE.speedThreshold;
+          } else if (distanceFeet <= 15) {
+            // Medium - standard precision
+            holeDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.MEDIUM.detectionRadius;
+            speedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.MEDIUM.speedThreshold;
+          } else {
+            // Long - more forgiving
+            holeDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.LONG.detectionRadius;
+            speedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.LONG.speedThreshold;
+          }
+
+          // Convert precision to WORLD UNITS using worldUnitsPerFoot for this distance
+          const worldUnitsPerFoot_final = getWUPF(distanceFeet);
+          const holeDetectionRadiusWorld = holeDetectionRadiusFeet * worldUnitsPerFoot_anim;
+
+          // Convert currentSpeed (world units/sec) to feet/sec
+          const currentSpeedFeetPerSec = currentSpeed / worldUnitsPerFoot_anim;
+
+          // Check both distance AND speed for realistic putting
+          const isGoingIn = distanceToHole <= holeDetectionRadiusWorld && currentSpeedFeetPerSec <= speedThresholdFeetPerSec;
+
+          console.log(`🎯 Hole detection (${distanceFeet.toFixed(1)}ft): distance=${distanceToHole.toFixed(3)} ≤ ${holeDetectionRadiusWorld.toFixed(3)}wu (${holeDetectionRadiusFeet.toFixed(2)}ft), speed=${currentSpeedFeetPerSec.toFixed(3)}ft/s ≤ ${speedThresholdFeetPerSec.toFixed(3)}ft/s → ${isGoingIn ? 'IN' : 'MISS'}`);
 
           if (isGoingIn) {
             // Ball goes in hole - quick and clean drop
@@ -2302,489 +2373,11 @@ export default function ExpoGL3DView({
             const rollDistance =
               Math.sqrt(
                 Math.pow(currentPos.x - startPos.x, 2) + Math.pow(currentPos.z - startPos.z, 2)
-              ) / 0.3048; // Actual distance traveled in feet
+              ) / worldUnitsPerFoot_anim; // Actual distance traveled in feet (scale-aware)
             const timeToHole = currentStep * 0.05;
 
             // Robot reaction for successful putt
-            const triggerRobotReaction = () => {
-              const robot = (window as any).robotAvatar;
-              const scene = sceneRef.current;
-              if (!robot || !scene) return;
-
-              // Create speech bubble
-              const createSpeechBubble = (message: string, emoji: string = '🎉') => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d')!;
-
-                // Clear canvas
-                ctx.clearRect(0, 0, 512, 128);
-
-                // Draw bubble background
-                ctx.fillStyle = 'white';
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.roundRect(20, 10, 472, 80, 15);
-                ctx.fill();
-                ctx.stroke();
-
-                // Draw bubble tail
-                ctx.beginPath();
-                ctx.moveTo(100, 90);
-                ctx.lineTo(80, 110);
-                ctx.lineTo(120, 90);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-
-                // Draw text
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 24px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(emoji + ' ' + message, 256, 50);
-
-                const bubbleTexture = new THREE.CanvasTexture(canvas);
-                const bubbleMaterial = new THREE.SpriteMaterial({
-                  map: bubbleTexture,
-                  transparent: true,
-                  depthWrite: false,
-                  depthTest: false, // Render on top of everything
-                });
-
-                const bubble = new THREE.Sprite(bubbleMaterial);
-                bubble.position.set(
-                  robot.position.x + 3.0, // To the right of robot
-                  robot.position.y, // Same height as robot
-                  robot.position.z // Same z position
-                );
-                bubble.scale.set(4, 1, 1);
-                bubble.userData.isSpeechBubble = true;
-                bubble.renderOrder = 100; // Highest render order to appear on top
-                scene.add(bubble);
-
-                // Remove bubble after 5 seconds (longer display time)
-                setTimeout(() => {
-                  scene.remove(bubble);
-                  if (bubble.material) bubble.material.dispose();
-                  if (bubble.material.map) bubble.material.map.dispose();
-                }, 5000);
-              };
-
-              if (success) {
-                // Success dance animation with intricate movements
-                createSpeechBubble('Smooth as a knife through hot butter!', '🔥');
-
-                // Create dance pose textures
-                const createDancePose = (poseType: string) => {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = 128;
-                  canvas.height = 256;
-                  const ctx = canvas.getContext('2d')!;
-
-                  ctx.clearRect(0, 0, 128, 256);
-
-                  // Female robot colors
-                  const skinColor = '#fdbcb4';
-                  const outfitColor = '#fff';
-                  const skirtColor = '#ff69b4';
-                  const hairColor = '#8b4513';
-
-                  // Hair (changes position with dance)
-                  ctx.fillStyle = hairColor;
-                  if (poseType === 'left') {
-                    // Hair swaying left
-                    ctx.beginPath();
-                    ctx.moveTo(30, 30);
-                    ctx.quadraticCurveTo(20, 50, 25, 75);
-                    ctx.quadraticCurveTo(30, 85, 40, 90);
-                    ctx.lineTo(45, 70);
-                    ctx.lineTo(43, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(85, 30);
-                    ctx.quadraticCurveTo(88, 50, 85, 75);
-                    ctx.quadraticCurveTo(83, 85, 78, 90);
-                    ctx.lineTo(73, 70);
-                    ctx.lineTo(75, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                  } else if (poseType === 'right') {
-                    // Hair swaying right
-                    ctx.beginPath();
-                    ctx.moveTo(43, 30);
-                    ctx.quadraticCurveTo(40, 50, 43, 75);
-                    ctx.quadraticCurveTo(45, 85, 50, 90);
-                    ctx.lineTo(55, 70);
-                    ctx.lineTo(53, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(98, 30);
-                    ctx.quadraticCurveTo(108, 50, 103, 75);
-                    ctx.quadraticCurveTo(98, 85, 88, 90);
-                    ctx.lineTo(83, 70);
-                    ctx.lineTo(85, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                  } else {
-                    // Default hair position
-                    ctx.beginPath();
-                    ctx.moveTo(40, 30);
-                    ctx.quadraticCurveTo(35, 50, 38, 75);
-                    ctx.quadraticCurveTo(40, 85, 45, 90);
-                    ctx.lineTo(50, 70);
-                    ctx.lineTo(48, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(88, 30);
-                    ctx.quadraticCurveTo(93, 50, 90, 75);
-                    ctx.quadraticCurveTo(88, 85, 83, 90);
-                    ctx.lineTo(78, 70);
-                    ctx.lineTo(80, 35);
-                    ctx.closePath();
-                    ctx.fill();
-                  }
-
-                  // Head (same for all poses)
-                  ctx.fillStyle = skinColor;
-                  ctx.beginPath();
-                  ctx.arc(64, 45, 23, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.strokeStyle = '#f0a0a0';
-                  ctx.lineWidth = 1;
-                  ctx.stroke();
-
-                  // Hair on top
-                  ctx.fillStyle = hairColor;
-                  ctx.beginPath();
-                  ctx.ellipse(64, 28, 24, 12, 0, Math.PI, Math.PI * 2);
-                  ctx.fill();
-
-                  // Pink visor
-                  ctx.fillStyle = skirtColor;
-                  ctx.beginPath();
-                  ctx.ellipse(64, 32, 28, 8, 0, Math.PI, Math.PI * 2);
-                  ctx.fill();
-                  ctx.fillStyle = '#ff85c8';
-                  ctx.beginPath();
-                  ctx.ellipse(64, 32, 35, 12, 0, Math.PI * 1.1, Math.PI * 2 - 0.1);
-                  ctx.fill();
-
-                  // Eyes (happy/excited)
-                  ctx.fillStyle = '#000';
-                  ctx.beginPath();
-                  ctx.arc(54, 44, 2, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.beginPath();
-                  ctx.arc(74, 44, 2, 0, Math.PI * 2);
-                  ctx.fill();
-
-                  // Big smile
-                  ctx.strokeStyle = '#ff69b4';
-                  ctx.lineWidth = 2;
-                  ctx.beginPath();
-                  ctx.arc(64, 48, 10, 0.1, Math.PI - 0.1);
-                  ctx.stroke();
-
-                  // Body/outfit
-                  ctx.fillStyle = outfitColor;
-                  ctx.fillRect(35, 70, 58, 45);
-                  ctx.strokeStyle = '#ddd';
-                  ctx.lineWidth = 1;
-                  ctx.strokeRect(35, 70, 58, 45);
-
-                  // Pink skirt
-                  ctx.fillStyle = skirtColor;
-                  ctx.beginPath();
-                  ctx.moveTo(35, 115);
-                  ctx.lineTo(93, 115);
-                  ctx.lineTo(88, 145);
-                  ctx.lineTo(40, 145);
-                  ctx.closePath();
-                  ctx.fill();
-                  ctx.stroke();
-
-                  // Different poses
-                  if (poseType === 'arms-up') {
-                    // Arms raised up in victory
-                    ctx.save();
-                    ctx.translate(28, 85);
-                    ctx.rotate(-Math.PI / 3);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 45);
-                    ctx.strokeRect(-8, 0, 16, 45);
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.translate(100, 85);
-                    ctx.rotate(Math.PI / 3);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 45);
-                    ctx.strokeRect(-8, 0, 16, 45);
-                    ctx.restore();
-
-                    // Putter raised in celebration
-                    ctx.save();
-                    ctx.translate(105, 50);
-                    ctx.rotate(Math.PI / 4);
-                    ctx.strokeStyle = '#444';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    ctx.lineTo(0, 50);
-                    ctx.stroke();
-                    ctx.fillStyle = skirtColor;
-                    ctx.fillRect(-2, 0, 4, 15);
-                    ctx.fillStyle = '#666';
-                    ctx.fillRect(-8, 48, 16, 5);
-                    ctx.restore();
-
-                    // Legs normal with socks
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(43, 145, 16, 45);
-                    ctx.strokeRect(43, 145, 16, 45);
-                    ctx.fillRect(69, 145, 16, 45);
-                    ctx.strokeRect(69, 145, 16, 45);
-
-                    // Socks
-                    ctx.fillStyle = outfitColor;
-                    ctx.fillRect(43, 190, 16, 25);
-                    ctx.strokeRect(43, 190, 16, 25);
-                    ctx.fillRect(69, 190, 16, 25);
-                    ctx.strokeRect(69, 190, 16, 25);
-                  } else if (poseType === 'split') {
-                    // Arms horizontal
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(5, 95, 23, 14);
-                    ctx.strokeRect(5, 95, 23, 14);
-                    ctx.fillRect(100, 95, 23, 14);
-                    ctx.strokeRect(100, 95, 23, 14);
-
-                    // White gloves at ends
-                    ctx.fillStyle = outfitColor;
-                    ctx.beginPath();
-                    ctx.arc(3, 102, 6, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(125, 102, 6, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    // Legs split with socks
-                    ctx.save();
-                    ctx.translate(51, 145);
-                    ctx.rotate(-Math.PI / 8);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 35);
-                    ctx.strokeRect(-8, 0, 16, 35);
-                    ctx.fillStyle = outfitColor;
-                    ctx.fillRect(-8, 35, 16, 25);
-                    ctx.strokeRect(-8, 35, 16, 25);
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.translate(77, 145);
-                    ctx.rotate(Math.PI / 8);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 35);
-                    ctx.strokeRect(-8, 0, 16, 35);
-                    ctx.fillStyle = outfitColor;
-                    ctx.fillRect(-8, 35, 16, 25);
-                    ctx.strokeRect(-8, 35, 16, 25);
-                    ctx.restore();
-                  } else if (poseType === 'disco') {
-                    // One arm up, one down
-                    ctx.save();
-                    ctx.translate(28, 85);
-                    ctx.rotate(-Math.PI / 4);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 50);
-                    ctx.strokeRect(-8, 0, 16, 50);
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.translate(100, 110);
-                    ctx.rotate(Math.PI / 4);
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(-8, 0, 16, 40);
-                    ctx.strokeRect(-8, 0, 16, 40);
-                    ctx.restore();
-
-                    // One leg bent
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(43, 145, 16, 45);
-                    ctx.strokeRect(43, 145, 16, 45);
-
-                    ctx.save();
-                    ctx.translate(77, 145);
-                    ctx.fillRect(-8, 0, 16, 30);
-                    ctx.strokeRect(-8, 0, 16, 30);
-                    ctx.translate(0, 30);
-                    ctx.rotate(-Math.PI / 6);
-                    ctx.fillRect(-8, 0, 16, 25);
-                    ctx.strokeRect(-8, 0, 16, 25);
-                    ctx.restore();
-
-                    // Socks on straight leg
-                    ctx.fillStyle = outfitColor;
-                    ctx.fillRect(43, 190, 16, 25);
-                    ctx.strokeRect(43, 190, 16, 25);
-                  } else {
-                    // Default pose (arms down)
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(15, 80, 16, 50);
-                    ctx.strokeRect(15, 80, 16, 50);
-                    ctx.fillRect(97, 80, 16, 50);
-                    ctx.strokeRect(97, 80, 16, 50);
-
-                    // Gloves
-                    ctx.fillStyle = outfitColor;
-                    ctx.beginPath();
-                    ctx.arc(23, 135, 7, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(105, 135, 7, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.fillStyle = skinColor;
-                    ctx.fillRect(43, 145, 16, 45);
-                    ctx.strokeRect(43, 145, 16, 45);
-                    ctx.fillRect(69, 145, 16, 45);
-                    ctx.strokeRect(69, 145, 16, 45);
-
-                    // Socks
-                    ctx.fillStyle = outfitColor;
-                    ctx.fillRect(43, 190, 16, 25);
-                    ctx.strokeRect(43, 190, 16, 25);
-                    ctx.fillRect(69, 190, 16, 25);
-                    ctx.strokeRect(69, 190, 16, 25);
-                  }
-
-                  // Pink golf shoes for all poses
-                  ctx.fillStyle = skirtColor;
-                  ctx.fillRect(39, 215, 24, 12);
-                  ctx.strokeRect(39, 215, 24, 12);
-                  ctx.fillRect(65, 215, 24, 12);
-                  ctx.strokeRect(65, 215, 24, 12);
-                  ctx.fillStyle = outfitColor;
-                  ctx.fillRect(42, 218, 18, 3);
-                  ctx.fillRect(68, 218, 18, 3);
-
-                  return new THREE.CanvasTexture(canvas);
-                };
-
-                // Create different pose textures
-                const poses = [
-                  createDancePose('arms-up'),
-                  createDancePose('split'),
-                  createDancePose('disco'),
-                  createDancePose('default'),
-                ];
-
-                // Store original texture
-                const originalTexture = robot.material.map;
-                const originalY = robot.position.y;
-
-                let danceTime = 0;
-                let currentPoseIndex = 0;
-                let lastPoseChange = 0;
-
-                const danceAnimation = () => {
-                  danceTime += 0.016; // ~60fps increment
-                  if (danceTime < 5) {
-                    // 5 seconds duration
-                    // Change pose every 0.3 seconds
-                    if (danceTime - lastPoseChange > 0.3) {
-                      currentPoseIndex = (currentPoseIndex + 1) % poses.length;
-                      robot.material.map = poses[currentPoseIndex];
-                      robot.material.needsUpdate = true;
-                      lastPoseChange = danceTime;
-                    }
-
-                    // Bouncing motion
-                    robot.position.y = originalY + Math.abs(Math.sin(danceTime * 4)) * 0.2;
-
-                    // Slight side-to-side sway
-                    robot.position.x = robot.userData.originalX + Math.sin(danceTime * 3) * 0.3;
-
-                    requestAnimationFrame(danceAnimation);
-                  } else {
-                    // Reset to original state
-                    robot.position.y = originalY;
-                    robot.position.x = robot.userData.originalX || robot.position.x;
-                    robot.material.map = originalTexture;
-                    robot.material.needsUpdate = true;
-
-                    // Dispose of dance textures
-                    poses.forEach(pose => pose.dispose());
-                  }
-                };
-
-                // Store original X position if not already stored
-                if (!robot.userData.originalX) {
-                  robot.userData.originalX = robot.position.x;
-                }
-
-                danceAnimation();
-              } else {
-                // Check if missed short (ball didn't reach hole)
-                const distanceToHole = Math.sqrt(
-                  Math.pow(currentPos.x - currentHolePos.x, 2) +
-                    Math.pow(currentPos.z - currentHolePos.z, 2)
-                );
-                const targetDistance = Math.abs(4 - currentHolePos.z); // Expected distance
-                const actualDistance = Math.abs(4 - currentPos.z);
-
-                if (actualDistance < targetDistance * 0.8) {
-                  // Missed short
-                  createSpeechBubble('Better workout kid!', '💪');
-
-                  // Flexing animation
-                  const originalScaleX = robot.scale.x;
-                  const originalScaleY = robot.scale.y;
-                  let flexTime = 0;
-                  const flexAnimation = () => {
-                    flexTime += 0.016; // ~60fps increment
-                    if (flexTime < 4) {
-                      // Increased duration to 4 seconds
-                      // Flex muscles (scale up and down) - slower frequency
-                      const flex = 1 + Math.sin(flexTime * 1.5) * 0.3; // Much slower flexing
-                      robot.scale.x = originalScaleX * flex;
-                      robot.scale.y = originalScaleY * (2 - flex); // Inverse for comedic effect
-                      requestAnimationFrame(flexAnimation);
-                    } else {
-                      // Reset scale
-                      robot.scale.x = originalScaleX;
-                      robot.scale.y = originalScaleY;
-                    }
-                  };
-                  flexAnimation();
-                } else {
-                  // Missed long or wide
-                  createSpeechBubble('So close! Try again!', '😅');
-
-                  // Head shake animation
-                  let shakeTime = 0;
-                  const shakeAnimation = () => {
-                    shakeTime += 0.016; // ~60fps increment
-                    if (shakeTime < 3) {
-                      // Increased duration to 3 seconds
-                      robot.material.rotation = Math.sin(shakeTime * 4) * 0.3; // Slower shaking
-                      requestAnimationFrame(shakeAnimation);
-                    } else {
-                      robot.material.rotation = 0;
-                    }
-                  };
-                  shakeAnimation();
-                }
-              }
-            };
-
-            triggerRobotReaction();
+            
 
             onPuttComplete({
               success,
@@ -2830,16 +2423,42 @@ export default function ExpoGL3DView({
           //   distanceToHole.toFixed(3)
           // );
 
-          // UNIFIED SUCCESS DETECTION - Use consistent physics for all modes
-          const success =
-            distanceToHole <= PUTTING_PHYSICS.HOLE_DETECTION_RADIUS &&
-            ballRef.current?.visible === false;
+          // UNIFIED SUCCESS DETECTION - v2 - DISTANCE-BASED PRECISION
+          // Use the same distance-based precision as during animation
+          const remainingYards = swingChallengeProgress?.remainingYards || (puttingData.holeDistance / 3);
+          const distanceFeet = remainingYards * 3;
+          
+          let finalDetectionRadiusFeet: number;
+          let finalSpeedThresholdFeetPerSec: number;
+          
+          if (distanceFeet <= 3) {
+            finalDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.VERY_CLOSE.detectionRadius;
+            finalSpeedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.VERY_CLOSE.speedThreshold;
+          } else if (distanceFeet <= 8) {
+            finalDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.CLOSE.detectionRadius;
+            finalSpeedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.CLOSE.speedThreshold;
+          } else if (distanceFeet <= 15) {
+            finalDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.MEDIUM.detectionRadius;
+            finalSpeedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.MEDIUM.speedThreshold;
+          } else {
+            finalDetectionRadiusFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.LONG.detectionRadius;
+            finalSpeedThresholdFeetPerSec = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.LONG.speedThreshold;
+          }
+          const worldUnitsPerFoot_final = ((): number => {
+            const fn = (window as any).getWorldUnitsPerFoot;
+            if (typeof fn === 'function') return fn(distanceFeet);
+            return distanceFeet <= 10 ? 1.0 : distanceFeet <= 25 ? 0.8 : distanceFeet <= 50 ? 0.6 : distanceFeet <= 100 ? 0.4 : 0.25;
+          })();
+          const finalDetectionRadiusWorld = finalDetectionRadiusFeet * worldUnitsPerFoot_final;
+          const success = distanceToHole <= finalDetectionRadiusWorld && ballRef.current?.visible === false;
 
           // Only log when ball is near hole or when successful
           if (success || distanceToHole < 1.0) {
             console.log('🎯 Final result:', {
               distance: distanceToHole.toFixed(3),
-              threshold: PUTTING_PHYSICS.HOLE_DETECTION_RADIUS,
+              threshold: finalDetectionRadiusWorld.toFixed(3),
+              distanceFeet: distanceFeet.toFixed(1),
+              precisionLevel: distanceFeet <= 3 ? 'VERY_CLOSE' : distanceFeet <= 8 ? 'CLOSE' : distanceFeet <= 15 ? 'MEDIUM' : 'LONG',
               ballVisible: ballRef.current?.visible,
               success: success,
             });
@@ -2972,6 +2591,11 @@ export default function ExpoGL3DView({
             trajectory: trajectory,
             maxHeight: Math.max(...trajectory.map(p => p.y)),
           });
+
+          // Always reset ball to avatar after putt completes; course visuals will re-render to reflect new lie
+          if (ballRef.current) {
+            ballRef.current.position.set(0, 0.08, 4);
+          }
 
           // If successful but ball didn't disappear during animation, make it disappear now
           if (success && ballRef.current) {

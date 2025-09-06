@@ -22,8 +22,8 @@ export interface VisualizationConfig {
 export class VisualizationSystem {
   private static trajectoryLine: THREE.Line | null = null;
   private static aimLine: THREE.Line | null = null;
-  private static lastTrajectoryState = { show: false, data: null };
-  private static lastAimLineState = { show: false, data: null };
+  private static lastTrajectoryState = { show: false, data: null as any };
+  private static lastAimLineState = { show: false, data: null as any };
 
   /**
    * Update trajectory visualization

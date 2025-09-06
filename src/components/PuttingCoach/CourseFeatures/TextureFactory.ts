@@ -11,7 +11,7 @@ export class TextureFactory {
   /**
    * Create sand texture for bunkers with variations
    */
-  static createSandTexture(variation: 'light' | 'medium' | 'dark' = 'medium'): THREE.CanvasTexture {
+  static createSandTexture(variation: 'light' | 'medium' | 'dark' = 'medium'): THREE.Texture {
     const key = `sand-${variation}`;
     
     return this.resourceManager.getTexture(key, () => {
@@ -63,7 +63,7 @@ export class TextureFactory {
   /**
    * Create rough grass texture with seasonal variations
    */
-  static createRoughTexture(season: 'spring' | 'summer' | 'fall' | 'winter' = 'summer'): THREE.CanvasTexture {
+  static createRoughTexture(season: 'spring' | 'summer' | 'fall' | 'winter' = 'summer'): THREE.Texture {
     const key = `rough-${season}`;
     
     return this.resourceManager.getTexture(key, () => {
@@ -128,7 +128,7 @@ export class TextureFactory {
   /**
    * Create fairway texture with quality variations
    */
-  static createFairwayTexture(quality: 'premium' | 'standard' | 'basic' = 'standard'): THREE.CanvasTexture {
+  static createFairwayTexture(quality: 'premium' | 'standard' | 'basic' = 'standard'): THREE.Texture {
     const key = `fairway-${quality}`;
     
     return this.resourceManager.getTexture(key, () => {
@@ -199,7 +199,7 @@ export class TextureFactory {
   /**
    * Create green texture with different speeds
    */
-  static createGreenTexture(speed: number = 10): THREE.CanvasTexture {
+  static createGreenTexture(speed: number = 10): THREE.Texture {
     const speedCategory = speed < 8 ? 'slow' : speed < 11 ? 'medium' : 'fast';
     const key = `green-${speedCategory}`;
     
@@ -243,7 +243,7 @@ export class TextureFactory {
   /**
    * Create terrain texture based on type
    */
-  static createTerrainTexture(type: 'hill' | 'ridge' | 'valley' | 'depression'): THREE.CanvasTexture {
+  static createTerrainTexture(type: 'hill' | 'ridge' | 'valley' | 'depression'): THREE.Texture {
     const key = `terrain-${type}`;
     
     return this.resourceManager.getTexture(key, () => {
@@ -298,7 +298,7 @@ export class TextureFactory {
   /**
    * Create water texture with animation support
    */
-  static createWaterTexture(type: 'pond' | 'stream' | 'lake' = 'pond'): THREE.CanvasTexture {
+  static createWaterTexture(type: 'pond' | 'stream' | 'lake' = 'pond'): THREE.Texture {
     const key = `water-${type}`;
     
     return this.resourceManager.getTexture(key, () => {
@@ -340,7 +340,7 @@ export class TextureFactory {
   /**
    * Create normal map for enhanced surface detail
    */
-  static createNormalMap(textureType: string): THREE.CanvasTexture {
+  static createNormalMap(textureType: string): THREE.Texture {
     const key = `normal-${textureType}`;
     
     return this.resourceManager.getTexture(key, () => {

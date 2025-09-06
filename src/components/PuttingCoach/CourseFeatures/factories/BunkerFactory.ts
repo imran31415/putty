@@ -3,13 +3,14 @@ import { BaseFeatureFactory } from './BaseFeatureFactory';
 import { RenderContext, CoordinateSystem } from '../CoordinateSystem';
 import { Hazard } from '../../../../types/game';
 import { MaterialFactory } from '../MaterialFactory';
-import { ResourceManager } from '../ResourceManager';
+import { MasterPositioningSystem } from '../../CoreSystems/MasterPositioningSystem';
 
 /**
  * Factory for creating bunker hazards with realistic sand texture
+ * Uses MasterPositioningSystem for consistent, reliable positioning
  */
 export class BunkerFactory extends BaseFeatureFactory<Hazard> {
-  private resourceManager = ResourceManager.getInstance();
+  private masterPositioning = MasterPositioningSystem.getInstance();
 
   /**
    * Create a bunker hazard mesh
@@ -21,107 +22,70 @@ export class BunkerFactory extends BaseFeatureFactory<Hazard> {
       return null;
     }
 
-    const coursePos = this.createCoursePosition(hazard);
+    // Create positioning context for master system
+    const positioningContext = {
+      ballPositionYards: context.ballProgressionYards,
+      holePositionYards: context.ballProgressionYards + (context.remainingYards || 0),
+      remainingYards: context.remainingYards || 0,
+      gameMode: context.gameMode
+    };
+
+    // Calculate position using MASTER positioning system
+    const featureYardsFromTee = Math.abs(hazard.position.y);
+    const lateralYards = hazard.position.x;
     
-    // Check visibility with bunker-specific range
-    if (!this.isFeatureVisible(coursePos, context, CoordinateSystem.HAZARD_VISIBILITY)) {
-      const relativePos = CoordinateSystem.getRelativePositionDescription(coursePos, context);
-      console.log(`🚫 Skipping bunker at ${coursePos.yardsFromTee}yd (${relativePos.description})`);
+    const featurePosition = this.masterPositioning.calculateFeaturePosition(
+      featureYardsFromTee,
+      lateralYards,
+      positioningContext
+    );
+    
+    if (!featurePosition.visible) {
+      console.log(`🚫 Bunker not visible: ${featurePosition.reason}`);
       return null;
     }
 
-    // Don't render bunkers that would be too close to the hole (within 20 yards)
-    if (context.remainingYards) {
-      const totalHoleYards = context.ballProgressionYards + context.remainingYards;
-      const yardsFromHole = Math.abs(coursePos.yardsFromTee - totalHoleYards);
-      if (yardsFromHole < 20) {
-        console.log(`🚫 Skipping bunker too close to hole: ${coursePos.yardsFromTee}yd (${yardsFromHole}yd from hole)`);
-        return null;
-      }
-    }
+    console.log(`✅ Bunker positioning: ${featurePosition.reason}`);
 
-    // Create bunker geometry - realistic tapered shape
+    // Get standard bunker size from master system
+    const standardSizes = this.masterPositioning.getStandardFeatureSizes();
+    const bunkerSize = standardSizes.bunker;
+
+    // Create bunker geometry with consistent scaling
     const geometry = new THREE.CylinderGeometry(
-      4,    // top radius - wider at surface
-      3,    // bottom radius - tapered deeper
-      0.4,  // height - shallow bunker
-      20    // segments for smooth curves
+      bunkerSize.radius * featurePosition.scale,     // Top radius scaled by distance
+      bunkerSize.radius * featurePosition.scale * 0.8, // Bottom radius (tapered)
+      bunkerSize.depth * featurePosition.scale,      // Depth scaled by distance
+      Math.max(8, Math.floor(16 * featurePosition.scale)) // Segments based on scale
     );
 
     // Use MaterialFactory for consistent sand material
     const material = MaterialFactory.createBunkerMaterial('medium');
 
-    // Position bunker in world
-    const worldPos = this.getWorldPosition(coursePos, context);
-    const depth = hazard.dimensions.depth || 2;
-    
-    // Adjust Y position to be slightly below ground
-    const adjustedWorldPos = {
-      ...worldPos,
-      y: worldPos.y - (depth * CoordinateSystem.WORLD_UNITS_PER_FOOT / 8)
-    };
-
-    const bunker = this.createMesh(geometry, material, adjustedWorldPos, {
+    // Create mesh at calculated world position (Y = 0 for ground level)
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(featurePosition.worldPosition);
+    mesh.userData = {
       isBunker: true,
       hazardIndex: index,
       featureType: 'bunker',
-      castShadow: false, // Bunkers don't cast shadows
-      receiveShadow: true // But they receive shadows
-    });
+      yardsFromTee: featureYardsFromTee,
+      scale: featurePosition.scale
+    };
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
 
-    scene.add(bunker);
+    scene.add(mesh);
 
-    // Log creation
-    this.logFeatureCreation('bunker', index, adjustedWorldPos, coursePos, context);
+    console.log(`🏖️ Bunker created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x, pos (${featurePosition.worldPosition.x.toFixed(2)}, ${featurePosition.worldPosition.y.toFixed(2)}, ${featurePosition.worldPosition.z.toFixed(2)})`);
 
-    return bunker;
+    return mesh;
   }
 
   /**
-   * Create bunker with sand variation based on hazard properties
+   * Get feature type for LOD system
    */
-  createWithVariation(scene: THREE.Scene, hazard: Hazard, index: number, context: RenderContext, variation: 'light' | 'medium' | 'dark' = 'medium'): THREE.Mesh | null {
-    // Same logic as create() but with material variation
-    const coursePos = this.createCoursePosition(hazard);
-    
-    if (!this.isFeatureVisible(coursePos, context, CoordinateSystem.HAZARD_VISIBILITY)) {
-      return null;
-    }
-
-    // Check hole proximity
-    if (context.remainingYards) {
-      const totalHoleYards = context.ballProgressionYards + context.remainingYards;
-      const yardsFromHole = Math.abs(coursePos.yardsFromTee - totalHoleYards);
-      if (yardsFromHole < 20) {
-        return null;
-      }
-    }
-
-    // Create geometry
-    const geometry = new THREE.CylinderGeometry(4, 3, 0.4, 20);
-    
-    // Use variation-specific material
-    const material = MaterialFactory.createBunkerMaterial(variation);
-
-    // Position and create mesh
-    const worldPos = this.getWorldPosition(coursePos, context);
-    const depth = hazard.dimensions.depth || 2;
-    const adjustedWorldPos = {
-      ...worldPos,
-      y: worldPos.y - (depth * CoordinateSystem.WORLD_UNITS_PER_FOOT / 8)
-    };
-
-    const bunker = this.createMesh(geometry, material, adjustedWorldPos, {
-      isBunker: true,
-      hazardIndex: index,
-      featureType: 'bunker',
-      sandVariation: variation,
-      castShadow: false,
-      receiveShadow: true
-    });
-
-    scene.add(bunker);
-    this.logFeatureCreation('bunker', index, adjustedWorldPos, coursePos, context);
-    return bunker;
+  protected getFeatureType(data: Hazard): string {
+    return 'bunker';
   }
 }

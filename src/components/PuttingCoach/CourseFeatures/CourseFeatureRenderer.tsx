@@ -5,6 +5,10 @@ import { CoordinateSystem, RenderContext, CoursePosition, WorldPosition } from '
 import { FeatureFactoryManager, defaultFactories } from './factories';
 import { ResourceManager } from './ResourceManager';
 import { PerformanceMonitor } from './PerformanceMonitor';
+import { VisibilityManager } from './VisibilityManager';
+import { GolfVisibilityRules } from './VisibilityRules';
+import { LODSystem } from './LODSystem';
+import { MasterPositioningSystem } from '../CoreSystems/MasterPositioningSystem';
 // No green renderer needed - greens are managed separately
 
 /**
@@ -20,6 +24,13 @@ export class CourseFeatureRenderer {
   // Resource and performance management
   private static resourceManager = ResourceManager.getInstance();
   private static performanceMonitor = PerformanceMonitor.getInstance();
+  
+  // Advanced visibility and LOD systems
+  private static visibilityManager = new VisibilityManager();
+  private static lodSystem = LODSystem.getInstance();
+  
+  // MASTER positioning system - single source of truth
+  private static masterPositioning = MasterPositioningSystem.getInstance();
   /**
    * Render complete course features for any golf course
    */
@@ -36,7 +47,21 @@ export class CourseFeatureRenderer {
     // Start performance monitoring
     CourseFeatureRenderer.performanceMonitor.startRender();
     
-    // Create render context for coordinate system
+    // Use MASTER positioning system - single source of truth
+    const positioningContext = {
+      ballPositionYards: ballProgressionYards,
+      holePositionYards: ballProgressionYards + (challengeProgress?.remainingYards || 0),
+      remainingYards: challengeProgress?.remainingYards || 0,
+      gameMode
+    };
+    
+    // Update global positions using master system
+    CourseFeatureRenderer.masterPositioning.updateGlobalPositions(positioningContext);
+    
+    // Log positioning analysis for validation
+    CourseFeatureRenderer.masterPositioning.logPositioningAnalysis(positioningContext);
+    
+    // Create render context for factories
     const context: RenderContext = {
       ballProgressionYards,
       remainingYards: challengeProgress?.remainingYards,
@@ -62,10 +87,10 @@ export class CourseFeatureRenderer {
     
     // Fairway features (landing zones, doglegs) temporarily disabled
     
-    // Render pin position indicator using factory pattern
-    if (pin) {
-      CourseFeatureRenderer.renderPinUsingFactory(scene, pin, 0, context);
-    }
+    // Pin/flag rendering disabled - using existing flag system
+    // if (pin) {
+    //   CourseFeatureRenderer.renderPinUsingFactory(scene, pin, 0, context);
+    // }
     
     console.log('✨ Course features rendered successfully');
     
@@ -88,9 +113,9 @@ export class CourseFeatureRenderer {
       console.warn(`No factory found for hazard type: ${hazard.type}`);
       return;
     }
-
+    
     try {
-      const mesh = factory.create(scene, hazard, index, context);
+      const mesh = factory.create(scene, hazard, index, context, undefined); // No camera info for now
       if (!mesh) {
         // Factory decided not to render (e.g., outside visibility range)
         CourseFeatureRenderer.performanceMonitor.recordFeatureSkipped(hazard.type, 'visibility culling');
@@ -111,9 +136,9 @@ export class CourseFeatureRenderer {
       console.warn('No terrain factory found');
       return;
     }
-
+    
     try {
-      const mesh = factory.create(scene, terrain, index, context);
+      const mesh = factory.create(scene, terrain, index, context, undefined); // No camera info for now
       if (!mesh) {
         // Factory decided not to render (e.g., outside visibility range)
         CourseFeatureRenderer.performanceMonitor.recordFeatureSkipped('terrain', 'visibility culling');
@@ -134,9 +159,9 @@ export class CourseFeatureRenderer {
       console.warn('No pin factory found');
       return;
     }
-
+    
     try {
-      const mesh = factory.create(scene, pin, index, context);
+      const mesh = factory.create(scene, pin, index, context, undefined); // No camera info for now
       if (!mesh) {
         console.warn('Pin factory returned null mesh');
         CourseFeatureRenderer.performanceMonitor.recordFeatureSkipped('pin', 'creation failed');
@@ -163,16 +188,18 @@ export class CourseFeatureRenderer {
   }
 
   /**
-   * Initialize resource management (call once at startup)
+   * Initialize basic course feature rendering (SIMPLIFIED)
    */
-  static initialize(): void {
-    console.log('🚀 Initializing CourseFeatureRenderer with resource management...');
+  static initialize(scenario: 'performance' | 'quality' | 'mobile' = 'quality'): void {
+    console.log('🚀 Initializing CourseFeatureRenderer - SIMPLIFIED mode...');
     
-    // Preload common resources for better performance
+    // Only initialize basic resource management - NO complex positioning
     CourseFeatureRenderer.resourceManager.preloadTextures();
     CourseFeatureRenderer.resourceManager.preloadMaterials();
     
-    console.log('✅ CourseFeatureRenderer initialized');
+    console.log(`✅ CourseFeatureRenderer initialized (SIMPLIFIED):`);
+    console.log(`   ⚙️ Profile: ${scenario}`);
+    console.log(`   📍 Positioning: SIMPLE mode - no complex systems`);
   }
 
   /**
@@ -182,8 +209,14 @@ export class CourseFeatureRenderer {
     return {
       rendering: CourseFeatureRenderer.performanceMonitor.getStats(),
       resources: CourseFeatureRenderer.resourceManager.getStats(),
+      visibility: CourseFeatureRenderer.visibilityManager.getStats(),
+      lod: CourseFeatureRenderer.lodSystem.getStats(),
       alerts: CourseFeatureRenderer.performanceMonitor.getAlerts(),
-      recommendations: CourseFeatureRenderer.performanceMonitor.getRecommendations()
+      recommendations: [
+        ...CourseFeatureRenderer.performanceMonitor.getRecommendations(),
+        ...CourseFeatureRenderer.visibilityManager.getRecommendations(),
+        ...CourseFeatureRenderer.lodSystem.getRecommendations()
+      ]
     };
   }
 
@@ -261,6 +294,72 @@ export class CourseFeatureRenderer {
   }
 
   /**
+   * Enable/disable visibility debugging
+   */
+  static setVisibilityDebugMode(enabled: boolean): void {
+    CourseFeatureRenderer.visibilityManager.setDebugMode(enabled);
+    console.log(`🐛 Visibility debugging: ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get comprehensive visibility report
+   */
+  static getVisibilityReport(): void {
+    console.log('👁️ === Visibility System Report ===');
+    
+    // Visibility stats
+    CourseFeatureRenderer.visibilityManager.logStats();
+    
+    // LOD stats
+    CourseFeatureRenderer.lodSystem.logStats();
+    
+    // Combined recommendations
+    const recommendations = CourseFeatureRenderer.getPerformanceStats().recommendations;
+    if (recommendations.length > 0) {
+      console.log('💡 Visibility Recommendations:');
+      recommendations.forEach((rec, i) => console.log(`   ${i + 1}. ${rec}`));
+    }
+    
+    console.log('👁️ === End Visibility Report ===');
+  }
+
+  /**
+   * Update visibility system settings
+   */
+  static configureVisibilitySystem(settings: {
+    maxVisibleFeatures?: number;
+    maxRenderDistance?: number;
+    enableFrustumCulling?: boolean;
+    scenario?: 'performance' | 'quality' | 'mobile';
+  }): void {
+    if (settings.scenario) {
+      // Re-initialize with new scenario
+      CourseFeatureRenderer.initialize(settings.scenario);
+    }
+    
+    // Update individual settings
+    if (settings.maxVisibleFeatures || settings.maxRenderDistance || settings.enableFrustumCulling !== undefined) {
+      CourseFeatureRenderer.visibilityManager.updateSettings({
+        maxVisibleFeatures: settings.maxVisibleFeatures,
+        maxRenderDistance: settings.maxRenderDistance,
+        frustumCulling: settings.enableFrustumCulling
+      });
+    }
+    
+    console.log('⚙️ Visibility system configured:', settings);
+  }
+
+  /**
+   * Reset all performance and visibility tracking
+   */
+  static resetAllTracking(): void {
+    CourseFeatureRenderer.performanceMonitor.reset();
+    CourseFeatureRenderer.visibilityManager.resetStats();
+    CourseFeatureRenderer.lodSystem.resetStats();
+    console.log('🔄 All tracking systems reset');
+  }
+
+  /**
    * Dispose factory resources when renderer is no longer needed
    */
   static dispose(): void {
@@ -269,6 +368,8 @@ export class CourseFeatureRenderer {
     CourseFeatureRenderer.factoryManager.dispose();
     CourseFeatureRenderer.resourceManager.dispose();
     CourseFeatureRenderer.performanceMonitor.dispose();
+    CourseFeatureRenderer.visibilityManager.dispose();
+    CourseFeatureRenderer.lodSystem.dispose();
     
     console.log('✅ CourseFeatureRenderer disposed');
   }
@@ -283,9 +384,8 @@ export class CourseFeatureRenderer {
         child.userData.isBunker ||
         child.userData.isWater ||
         child.userData.isRough ||
-        child.userData.isTerrain ||
-        child.userData.isPinIndicator ||
-        child.userData.isHole
+        child.userData.isTerrain
+        // Pin/hole cleanup removed - using existing flag system
       )
     );
     

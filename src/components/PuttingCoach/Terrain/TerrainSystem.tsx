@@ -346,7 +346,7 @@ export class TerrainSystem {
     TerrainSystem.removeExistingTerrain(scene);
 
     // Recreate terrain with new size
-    const isSwingMode = gameMode === 'swing';
+    const isSwingMode = gameMode === 'swing' as any;
     TerrainSystem.setupCompleteTerrain(scene, {
       holeDistanceFeet: newHoleDistanceFeet,
       isSwingMode,

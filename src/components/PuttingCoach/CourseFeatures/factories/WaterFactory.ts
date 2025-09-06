@@ -3,11 +3,15 @@ import { BaseFeatureFactory } from './BaseFeatureFactory';
 import { RenderContext, CoordinateSystem } from '../CoordinateSystem';
 import { Hazard } from '../../../../types/game';
 import { MaterialFactory } from '../MaterialFactory';
+import { MasterPositioningSystem } from '../../CoreSystems/MasterPositioningSystem';
 
 /**
  * Factory for creating water hazards with realistic reflective surfaces
+ * Uses MasterPositioningSystem for consistent, reliable positioning
  */
 export class WaterFactory extends BaseFeatureFactory<Hazard> {
+  private masterPositioning = MasterPositioningSystem.getInstance();
+
   /**
    * Create a water hazard mesh
    */
@@ -18,110 +22,73 @@ export class WaterFactory extends BaseFeatureFactory<Hazard> {
       return null;
     }
 
-    const coursePos = this.createCoursePosition(hazard);
+    // Create positioning context for master system
+    const positioningContext = {
+      ballPositionYards: context.ballProgressionYards,
+      holePositionYards: context.ballProgressionYards + (context.remainingYards || 0),
+      remainingYards: context.remainingYards || 0,
+      gameMode: context.gameMode
+    };
+
+    // Calculate position using MASTER positioning system
+    const featureYardsFromTee = Math.abs(hazard.position.y);
+    const lateralYards = hazard.position.x;
     
-    // Check visibility with hazard-specific range
-    if (!this.isFeatureVisible(coursePos, context, CoordinateSystem.HAZARD_VISIBILITY)) {
-      const relativePos = CoordinateSystem.getRelativePositionDescription(coursePos, context);
-      console.log(`🚫 Skipping water at ${coursePos.yardsFromTee}yd (${relativePos.description})`);
+    const featurePosition = this.masterPositioning.calculateFeaturePosition(
+      featureYardsFromTee,
+      lateralYards,
+      positioningContext
+    );
+    
+    if (!featurePosition.visible) {
+      console.log(`🚫 Water not visible: ${featurePosition.reason}`);
       return null;
     }
 
-    // Create water geometry - flat plane for water surface
-    const width = hazard.dimensions.width;
-    const length = hazard.dimensions.length;
+    console.log(`✅ Water positioning: ${featurePosition.reason}`);
+
+    // Create water geometry based on hazard dimensions
+    const width = hazard.dimensions.width || 30; // Default 30 yard width
+    const length = hazard.dimensions.length || 20; // Default 20 yard length
     
     const geometry = new THREE.PlaneGeometry(
-      (width * CoordinateSystem.WORLD_UNITS_PER_FOOT) / 3,
-      (length * CoordinateSystem.WORLD_UNITS_PER_FOOT) / 3,
-      16, // width segments for subtle water movement
-      16  // height segments for subtle water movement
+      width * featurePosition.scale * 0.1,  // Width scaled by distance
+      length * featurePosition.scale * 0.1, // Length scaled by distance
+      8, 8 // Reasonable segment count
     );
 
     // Use MaterialFactory for consistent water material
     const material = MaterialFactory.createWaterMaterial('pond');
 
-    // Position water in world
-    const worldPos = this.getWorldPosition(coursePos, context);
-    
-    // Adjust Y position to be slightly above ground (water surface level)
-    const adjustedWorldPos = {
-      ...worldPos,
-      y: 0.05 // Water surface slightly above ground
-    };
-
-    const water = this.createMesh(geometry, material, adjustedWorldPos, {
-      isWater: true,
-      hazardIndex: index,
-      featureType: 'water',
-      castShadow: false, // Water doesn't cast shadows
-      receiveShadow: false // Water surface doesn't receive shadows well
-    });
-
-    // Rotate to lie flat (horizontal)
-    water.rotation.x = -Math.PI / 2;
-
-    scene.add(water);
-
-    // Log creation
-    this.logFeatureCreation('water', index, adjustedWorldPos, coursePos, context);
-
-    return water;
-  }
-
-  /**
-   * Create water with specific type (pond, stream, lake)
-   */
-  createWithType(scene: THREE.Scene, hazard: Hazard, index: number, context: RenderContext, waterType: 'pond' | 'stream' | 'lake' = 'pond'): THREE.Mesh | null {
-    if (hazard.type !== 'water') {
-      console.warn(`WaterFactory received non-water hazard: ${hazard.type}`);
-      return null;
-    }
-
-    const coursePos = this.createCoursePosition(hazard);
-    
-    if (!this.isFeatureVisible(coursePos, context, CoordinateSystem.HAZARD_VISIBILITY)) {
-      return null;
-    }
-
-    // Create geometry
-    const width = hazard.dimensions.width;
-    const length = hazard.dimensions.length;
-    const geometry = new THREE.PlaneGeometry(
-      (width * CoordinateSystem.WORLD_UNITS_PER_FOOT) / 3,
-      (length * CoordinateSystem.WORLD_UNITS_PER_FOOT) / 3,
-      16, 16
+    // Create mesh at calculated world position (Y = 0.02 for water surface)
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(
+      featurePosition.worldPosition.x,
+      0.02, // Water surface slightly above ground
+      featurePosition.worldPosition.z
     );
-
-    // Use type-specific material
-    const material = MaterialFactory.createWaterMaterial(waterType);
-
-    // Position and create mesh
-    const worldPos = this.getWorldPosition(coursePos, context);
-    const adjustedWorldPos = { ...worldPos, y: 0.05 };
-
-    const water = this.createMesh(geometry, material, adjustedWorldPos, {
+    mesh.rotation.x = -Math.PI / 2; // Lie flat
+    mesh.userData = {
       isWater: true,
       hazardIndex: index,
       featureType: 'water',
-      waterType: waterType,
-      castShadow: false,
-      receiveShadow: false
-    });
+      yardsFromTee: featureYardsFromTee,
+      scale: featurePosition.scale
+    };
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
 
-    water.rotation.x = -Math.PI / 2;
-    scene.add(water);
-    this.logFeatureCreation('water', index, adjustedWorldPos, coursePos, context);
-    return water;
+    scene.add(mesh);
+
+    console.log(`💧 Water created: ${featureYardsFromTee}yd from tee, scale ${featurePosition.scale.toFixed(2)}x`);
+
+    return mesh;
   }
 
   /**
-   * Update animated water (if using animated materials)
-   * Call this in animation loop for water effects
+   * Get feature type for LOD system
    */
-  updateAnimation(mesh: THREE.Mesh, deltaTime: number): void {
-    if (mesh.material instanceof THREE.ShaderMaterial && mesh.material.uniforms.time) {
-      mesh.material.uniforms.time.value += deltaTime;
-    }
+  protected getFeatureType(data: Hazard): string {
+    return 'water';
   }
 }

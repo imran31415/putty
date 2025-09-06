@@ -8,6 +8,9 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ClubType, CLUB_DATA } from '../../constants/clubData';
 import { PUTT_MODE_THRESHOLD } from '../../constants/swingConstants';
+import { PrecisionDistanceCalculator } from './Physics/PrecisionDistanceCalculator';
+import { PUTTING_PHYSICS } from '../../constants/puttingPhysics';
+import { CoordinateSystem } from './CourseFeatures/CoordinateSystem';
 
 // Challenge progress state
 export interface SwingChallengeProgress {
@@ -155,12 +158,14 @@ export function processPuttShot(
   progress: SwingChallengeProgress,
   puttResult: any
 ): SwingChallengeProgress {
-  console.log('📢 processPuttShot v4 - SUCCESS AWARE');
+  console.log('📢 processPuttShot v6 - SIMPLIFIED DISTANCE CALCULATION');
 
   // CHECK IF PUTT WAS SUCCESSFUL FIRST!
   if (puttResult.success) {
     console.log('⛳ PUTT SUCCESSFUL! Ball in hole!');
-    // Ball went in - set position exactly at hole
+    
+    // SIMPLE: Ball went in hole - set position to exact hole location
+    
     return {
       ...progress,
       currentStroke: progress.currentStroke + 1,
@@ -179,75 +184,65 @@ export function processPuttShot(
     };
   }
 
-  // Putt didn't go in - calculate new position based on actual roll distance
-  // Use the final position from the putt result if available
+  // Putt didn't go in - use precise distance calculator for accurate positioning
+  console.log('🎯 Calculating precise new position after missed putt...');
+  
+  // Calculate precise distance traveled using world coordinates
   let newPosition: number;
   let actualDistanceYards: number;
 
-  if (puttResult.finalPosition) {
-    // Calculate actual distance traveled toward/away from hole using final position
-    const ballStartZ = 4; // Ball always starts at z=4
-    const finalZ = puttResult.finalPosition.z;
-    const distanceTraveledFeet =
-      Math.abs(ballStartZ - finalZ) /
-      ((window as any).getWorldUnitsPerFoot
-        ? (window as any).getWorldUnitsPerFoot(progress.remainingYards * 3)
-        : 1.0);
-    actualDistanceYards = distanceTraveledFeet / 3;
-
-    // Determine new position based on direction
-    const hasOvershot = progress.ballPositionYards > progress.holePositionYards;
-    if (hasOvershot) {
-      newPosition = progress.ballPositionYards - actualDistanceYards;
-      console.log(
-        '🔴 PUTT OVERSHOOT: ',
-        progress.ballPositionYards,
-        '-',
-        actualDistanceYards,
-        '=',
-        newPosition
-      );
-    } else {
-      newPosition = progress.ballPositionYards + actualDistanceYards;
-      console.log(
-        '🟢 NORMAL PUTT: ',
-        progress.ballPositionYards,
-        '+',
-        actualDistanceYards,
-        '=',
-        newPosition
-      );
-    }
+  if (puttResult.finalPosition && puttResult.finalPositionYards) {
+    // Use the precise final position from the new putting system
+    newPosition = puttResult.finalPositionYards;
+    actualDistanceYards = Math.abs(newPosition - progress.ballPositionYards);
+    
+    console.log('🎯 PRECISE PUTT CALCULATION:', {
+      startPosition: progress.ballPositionYards,
+      finalPosition: newPosition,
+      distanceTraveled: actualDistanceYards,
+      rollDistance: puttResult.rollDistance || 0
+    });
   } else {
-    // Fallback to old logic if no final position
-    const puttDistanceYards = (puttResult.rollDistance || 0) / 3;
-    const hasOvershot = progress.ballPositionYards > progress.holePositionYards;
-
-    if (hasOvershot) {
-      newPosition = progress.ballPositionYards - puttDistanceYards;
-      console.log(
-        '🔴 PUTT OVERSHOOT (fallback): ',
-        progress.ballPositionYards,
-        '-',
-        puttDistanceYards,
-        '=',
-        newPosition
-      );
+    // SIMPLE: Always use roll distance - no complex calculations
+    actualDistanceYards = (puttResult.rollDistance || 0) / 3;
+    
+    // FIXED: For putting, calculate new remaining distance directly
+    // Don't use course positions - use putting distance logic
+    const currentRemainingYards = progress.remainingYards;
+    const puttDistanceYards = actualDistanceYards;
+    
+    // Handle overshoot precisely: if the putt exceeds remaining, place ball beyond the hole
+    let newRemainingYards: number;
+    if (puttDistanceYards <= currentRemainingYards) {
+      // Did not reach hole
+      newRemainingYards = currentRemainingYards - puttDistanceYards;
+      newPosition = progress.holePositionYards - newRemainingYards;
     } else {
-      newPosition = progress.ballPositionYards + puttDistanceYards;
-      console.log(
-        '🟢 NORMAL PUTT (fallback): ',
-        progress.ballPositionYards,
-        '+',
-        puttDistanceYards,
-        '=',
-        newPosition
-      );
+      // Overshot: distance beyond hole becomes the new remaining
+      const overshootYards = puttDistanceYards - currentRemainingYards;
+      newRemainingYards = overshootYards;
+      newPosition = progress.holePositionYards + overshootYards;
     }
-    actualDistanceYards = puttDistanceYards;
+    
+    console.log('⛳ PUTTING LOGIC:', {
+      startingRemaining: currentRemainingYards,
+      puttDistance: puttDistanceYards,
+      newRemaining: newRemainingYards,
+      newBallPosition: newPosition
+    });
   }
 
-  const newRemaining = Math.abs(progress.holePositionYards - newPosition);
+  // ROUND positions to avoid decimal precision errors
+  newPosition = Math.round(newPosition * 10) / 10; // Round to 1 decimal place
+  actualDistanceYards = Math.round(actualDistanceYards * 10) / 10;
+  
+  // Calculate remaining distance
+  // If we computed newRemainingYards above (miss path), use it to avoid any snapping artifacts
+  // @ts-ignore - newRemainingYards exists if we took the simple miss path
+  const newRemaining = typeof newRemainingYards === 'number'
+    // @ts-ignore - use computed miss value if present
+    ? Math.round(newRemainingYards * 10) / 10
+    : Math.abs(progress.holePositionYards - newPosition);
 
   console.log('⛳ Putt shot (missed):', {
     stroke: progress.currentStroke + 1,
@@ -279,7 +274,19 @@ export function processPuttShot(
  * Check if hole is completed
  */
 export function isHoleCompleted(progress: SwingChallengeProgress): boolean {
-  return progress.remainingYards < 0.5; // Within 0.5 yards (1.5 feet) counts as in
+  // Use the same distance-based precision thresholds (in feet) as the putting animation
+  const remainingFeet = progress.remainingYards * 3;
+  let detectionFeet: number;
+  if (remainingFeet <= 3) {
+    detectionFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.VERY_CLOSE.detectionRadius;
+  } else if (remainingFeet <= 8) {
+    detectionFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.CLOSE.detectionRadius;
+  } else if (remainingFeet <= 15) {
+    detectionFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.MEDIUM.detectionRadius;
+  } else {
+    detectionFeet = PUTTING_PHYSICS.DISTANCE_BASED_PRECISION.LONG.detectionRadius;
+  }
+  return remainingFeet <= detectionFeet;
 }
 
 /**

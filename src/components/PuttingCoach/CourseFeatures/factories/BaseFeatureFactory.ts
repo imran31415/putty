@@ -1,24 +1,36 @@
 import * as THREE from 'three';
 import { CoordinateSystem, RenderContext, CoursePosition, WorldPosition } from '../CoordinateSystem';
+import { VisibilityManager, VisibilityDecision, CameraInfo } from '../VisibilityManager';
+import { LODSystem, LODLevel } from '../LODSystem';
 
 /**
  * Base class for all course feature factories
  * Provides common functionality and enforces consistent interface
  */
 export abstract class BaseFeatureFactory<TData> {
+  protected visibilityManager: VisibilityManager;
+  protected lodSystem: LODSystem;
+
+  constructor() {
+    this.visibilityManager = new VisibilityManager();
+    this.lodSystem = LODSystem.getInstance();
+  }
+
   /**
    * Create a feature mesh and add it to the scene
    * @param scene - THREE.js scene to add the feature to
    * @param data - Feature data (hazard, terrain, pin, etc.)
    * @param index - Feature index for identification
    * @param context - Rendering context with ball position and game state
+   * @param cameraInfo - Optional camera information for frustum culling
    * @returns The created mesh or null if feature shouldn't be rendered
    */
   abstract create(
     scene: THREE.Scene, 
     data: TData, 
     index: number, 
-    context: RenderContext
+    context: RenderContext,
+    cameraInfo?: CameraInfo
   ): THREE.Mesh | null;
 
   /**
@@ -42,11 +54,27 @@ export abstract class BaseFeatureFactory<TData> {
   }
 
   /**
-   * Check if a feature should be visible based on distance and game rules
-   * @param coursePos - Course position of the feature
-   * @param context - Rendering context
-   * @param customRange - Optional custom visibility range
-   * @returns true if feature should be rendered
+   * Check visibility using the advanced visibility system
+   */
+  protected checkVisibility(
+    data: TData, 
+    context: RenderContext, 
+    cameraInfo?: CameraInfo
+  ): VisibilityDecision {
+    return this.visibilityManager.shouldRenderFeature(data, context, cameraInfo);
+  }
+
+
+  /**
+   * Get feature type for LOD calculations - should be overridden by subclasses
+   */
+  protected getFeatureType(data: TData): string {
+    return (data as any).type || 'default';
+  }
+
+  /**
+   * DEPRECATED: Check if a feature should be visible based on distance and game rules
+   * Use checkVisibility() instead for advanced visibility management
    */
   protected isFeatureVisible(
     coursePos: CoursePosition,

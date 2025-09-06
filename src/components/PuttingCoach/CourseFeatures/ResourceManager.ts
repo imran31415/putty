@@ -24,8 +24,8 @@ export interface TextureOptions {
   wrapS?: THREE.Wrapping;
   wrapT?: THREE.Wrapping;
   repeat?: { x: number; y: number };
-  magFilter?: THREE.TextureFilter;
-  minFilter?: THREE.TextureFilter;
+  magFilter?: THREE.MagnificationTextureFilter;
+  minFilter?: THREE.MinificationTextureFilter;
 }
 
 export interface MaterialOptions {
