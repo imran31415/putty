@@ -2249,6 +2249,125 @@ export default function ExpoGL3DView({
       // Animate ball along trajectory
       let currentStep = 0;
       const animateBall = () => {
+        // Lightweight arcade FX helpers scoped to this animation
+        const createArcadePopup = (
+          message: string,
+          color: string,
+          worldPosition: THREE.Vector3,
+          size: number = 3.2
+        ) => {
+          const scene = sceneRef.current;
+          if (!scene) return;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 160;
+          const ctx = canvas.getContext('2d')!;
+
+          // Background glow
+          const gradient = ctx.createLinearGradient(0, 0, 512, 0);
+          gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+          gradient.addColorStop(0.5, 'rgba(0,0,0,0.85)');
+          gradient.addColorStop(1, 'rgba(0,0,0,0.6)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, 512, 160);
+
+          // Text
+          ctx.font = 'bold 64px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = color;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 20;
+          ctx.fillText(message, 256, 90);
+
+          const texture = new THREE.CanvasTexture(canvas);
+          const material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+            depthTest: false,
+            opacity: 0.0,
+          });
+          const sprite = new THREE.Sprite(material);
+          sprite.position.copy(worldPosition);
+          sprite.scale.set(size, size * 0.42, 1);
+          sprite.userData.__arcadePopup = true;
+          sprite.renderOrder = 200;
+          scene.add(sprite);
+
+          let elapsed = 0;
+          const duration = 1400; // ms
+          const start = performance.now();
+          const startY = sprite.position.y;
+
+          const animate = () => {
+            const now = performance.now();
+            elapsed = now - start;
+            const t = Math.min(1, elapsed / duration);
+            // Ease out
+            const ease = 1 - Math.pow(1 - t, 3);
+            material.opacity = t < 0.2 ? ease * 1.0 : 1.0 - Math.max(0, (t - 0.6) / 0.4);
+            const scalePulse = 1 + Math.sin(ease * Math.PI) * 0.10;
+            sprite.scale.set(size * scalePulse, size * 0.35 * scalePulse, 1);
+            sprite.position.y = startY + ease * 0.9;
+
+            if (t < 1) {
+              requestAnimationFrame(animate);
+            } else {
+              scene.remove(sprite);
+              if (sprite.material) sprite.material.dispose();
+              if ((sprite.material as any).map) (sprite.material as any).map.dispose();
+            }
+          };
+          requestAnimationFrame(animate);
+        };
+
+        const createHolePulseRing = (
+          holePos: THREE.Vector3,
+          color: string = '#FFD700'
+        ) => {
+          const scene = sceneRef.current;
+          if (!scene) return;
+
+          // Base ring sizes relative to regulation hole size so it remains visible across scales
+          const baseRadius = (window as any)?.PUTTING_PHYSICS?.REGULATION_HOLE?.RADIUS_WORLD_UNITS || 0.08;
+          const inner = baseRadius * 1.2;
+          const outer = baseRadius * 2.8;
+          const geom = new THREE.RingGeometry(inner, outer, 64);
+          const mat = new THREE.MeshBasicMaterial({
+            color,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.95,
+            depthTest: false,
+            depthWrite: false,
+          });
+          const ring = new THREE.Mesh(geom, mat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(holePos.x, 0.02, holePos.z);
+          ring.renderOrder = 150;
+          scene.add(ring);
+
+          const start = performance.now();
+          const duration = 700;
+          const animate = () => {
+            const t = (performance.now() - start) / duration;
+            if (t < 1) {
+              const ease = 1 - Math.pow(1 - t, 2);
+              const s = 1 + ease * 1.6;
+              ring.scale.set(s, s, 1);
+              mat.opacity = Math.max(0, 0.95 * (1 - ease));
+              requestAnimationFrame(animate);
+            } else {
+              scene.remove(ring);
+              mat.dispose();
+              geom.dispose();
+            }
+          };
+          requestAnimationFrame(animate);
+        };
+
         if (ballRef.current && currentStep < trajectory.length) {
           const currentPos = trajectory[currentStep];
           ballRef.current.position.set(currentPos.x, currentPos.y, currentPos.z);
@@ -2366,6 +2485,12 @@ export default function ExpoGL3DView({
               }
             }, 200); // Quick disappearance
 
+            // Arcade FX: ring pulse + popup
+            const holeCenterForFx = new THREE.Vector3(currentHolePos.x, currentHolePos.y, currentHolePos.z);
+            console.log('✨ Arcade FX: HOLED!');
+            createHolePulseRing(holeCenterForFx, '#FFD700');
+            createArcadePopup('HOLED!', '#FFD700', holeCenterForFx.clone().add(new THREE.Vector3(0, 0.6, 0)), 2.6);
+
             // Complete animation immediately
             setIsAnimating(false);
             const success = true; // Ball went in hole
@@ -2465,9 +2590,24 @@ export default function ExpoGL3DView({
           }
           const accuracy = Math.max(0, 100 - (distanceToHole / 2.0) * 100); // More forgiving accuracy calculation
 
+          // Arcade FX on near miss
+          const nearFeet = distanceToHole / worldUnitsPerFoot_final;
+          if (!success && nearFeet <= 0.7) {
+            const holeCenterForFx = new THREE.Vector3(currentHolePos.x, currentHolePos.y, currentHolePos.z);
+            console.log('✨ Arcade FX: SO CLOSE!', { nearFeet: nearFeet.toFixed(2) });
+            createHolePulseRing(holeCenterForFx, '#FF4081');
+            createArcadePopup('SO CLOSE!', '#FF4081', holeCenterForFx.clone().add(new THREE.Vector3(0, 0.6, 0)), 2.2);
+          }
+
+          // Use correct scale-aware conversion from world units to feet
+          const worldUnitsPerFoot_anim_final = ((): number => {
+            const fn = (window as any).getWorldUnitsPerFoot;
+            if (typeof fn === 'function') return fn(distanceFeet);
+            return distanceFeet <= 10 ? 1.0 : distanceFeet <= 25 ? 0.8 : distanceFeet <= 50 ? 0.6 : distanceFeet <= 100 ? 0.4 : 0.25;
+          })();
           const actualRollDistance =
             Math.sqrt(Math.pow(finalPos.x - startPos.x, 2) + Math.pow(finalPos.z - startPos.z, 2)) /
-            0.3048; // Actual distance in feet
+            worldUnitsPerFoot_anim_final; // Actual distance in feet (scale-aware)
 
           const timeToHole = trajectory.length * 0.05;
 
@@ -2590,6 +2730,8 @@ export default function ExpoGL3DView({
             finalPosition: { x: finalPos.x, y: finalPos.y, z: finalPos.z },
             trajectory: trajectory,
             maxHeight: Math.max(...trajectory.map(p => p.y)),
+            // Provide precise final distance-to-hole in feet for downstream logic (typed on PuttingResult)
+            finalDistanceToHoleFeet: distanceToHole / worldUnitsPerFoot_anim_final,
           });
 
           // Always reset ball to avatar after putt completes; course visuals will re-render to reflect new lie

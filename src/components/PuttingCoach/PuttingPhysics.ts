@@ -25,6 +25,8 @@ export interface PuttingResult {
   timeToHole: number;
   maxHeight: number;
   accuracy: number; // percentage
+  // Optional precise final distance to hole in feet (scale-aware), when available
+  finalDistanceToHoleFeet?: number;
 }
 
 export class PuttingPhysics {

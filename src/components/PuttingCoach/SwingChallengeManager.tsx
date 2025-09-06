@@ -209,7 +209,10 @@ export function processPuttShot(
     // FIXED: For putting, calculate new remaining distance directly
     // Don't use course positions - use putting distance logic
     const currentRemainingYards = progress.remainingYards;
-    const puttDistanceYards = actualDistanceYards;
+    // Prefer precise final distance to hole from ExpoGL if provided
+    const puttDistanceYards = typeof puttResult.finalDistanceToHoleFeet === 'number'
+      ? Math.max(0, currentRemainingYards - (puttResult.finalDistanceToHoleFeet / 3))
+      : actualDistanceYards;
     
     // Handle overshoot precisely: if the putt exceeds remaining, place ball beyond the hole
     let newRemainingYards: number;
