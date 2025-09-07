@@ -524,124 +524,126 @@ function PuttingCoachAppCore() {
           swingChallengeProgress={swingChallengeProgress}
         />
 
-        {/* Floating PUTT Button with Mode Selector */}
-        <View style={styles.floatingPuttContainer}>
-          {/* Slingshot overlay for swing mode */}
-          {gameMode === 'swing' && (
-            <View
-              onStartShouldSetResponder={() => true}
-              onMoveShouldSetResponder={() => true}
-              onResponderGrant={(e: any) => {
-                const { x, y } = getEventXY(e);
-                setSlingshotStart({ x, y });
-                setSlingshotPoint({ x, y });
-                setSlingshotDragging(true);
-              }}
-              onResponderMove={(e: any) => {
-                if (!slingshotDragging) return;
-                const { x, y } = getEventXY(e);
-                setSlingshotPoint({ x, y });
-                // If dragged beyond bottom, auto-release for smooth UX
-                if (y >= (Dimensions.get('window').height - 2)) {
-                  if (slingshotStart) {
-                    applySlingshotShot(slingshotStart, { x, y });
-                  }
-                  setSlingshotDragging(false);
-                  setSlingshotStart(null);
-                  setSlingshotPoint(null);
-                }
-              }}
-              onResponderRelease={(e: any) => {
-                if (slingshotDragging && slingshotStart) {
-                  const { x, y } = getEventXY(e);
+        {/* Full-screen slingshot gesture layer for mobile reliability */}
+        {gameMode === 'swing' && (
+          <View
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onStartShouldSetResponderCapture={() => true}
+            onMoveShouldSetResponderCapture={() => true}
+            onResponderGrant={(e: any) => {
+              const { x, y } = getEventXY(e);
+              setSlingshotStart({ x, y });
+              setSlingshotPoint({ x, y });
+              setSlingshotDragging(true);
+            }}
+            onResponderMove={(e: any) => {
+              if (!slingshotDragging) return;
+              const { x, y } = getEventXY(e);
+              setSlingshotPoint({ x, y });
+              if (y >= (Dimensions.get('window').height - 2)) {
+                if (slingshotStart) {
                   applySlingshotShot(slingshotStart, { x, y });
                 }
                 setSlingshotDragging(false);
                 setSlingshotStart(null);
                 setSlingshotPoint(null);
-              }}
-              // Touch fallback so first press engages immediately on some platforms
-              onTouchStart={(e: any) => {
+              }
+            }}
+            onResponderRelease={(e: any) => {
+              if (slingshotDragging && slingshotStart) {
                 const { x, y } = getEventXY(e);
-                setSlingshotStart({ x, y });
-                setSlingshotPoint({ x, y });
-                setSlingshotDragging(true);
-              }}
-              onTouchMove={(e: any) => {
-                if (!slingshotDragging) return;
-                const { x, y } = getEventXY(e);
-                setSlingshotPoint({ x, y });
-                if (y >= (Dimensions.get('window').height - 2)) {
-                  if (slingshotStart) {
-                    applySlingshotShot(slingshotStart, { x, y });
-                  }
-                  setSlingshotDragging(false);
-                  setSlingshotStart(null);
-                  setSlingshotPoint(null);
-                }
-              }}
-              onTouchEnd={(e: any) => {
-                if (slingshotDragging && slingshotStart) {
-                  const { x, y } = getEventXY(e);
+                applySlingshotShot(slingshotStart, { x, y });
+              }
+              setSlingshotDragging(false);
+              setSlingshotStart(null);
+              setSlingshotPoint(null);
+            }}
+            onResponderTerminationRequest={() => false}
+            onTouchStart={(e: any) => {
+              const { x, y } = getEventXY(e);
+              setSlingshotStart({ x, y });
+              setSlingshotPoint({ x, y });
+              setSlingshotDragging(true);
+            }}
+            onTouchMove={(e: any) => {
+              if (!slingshotDragging) return;
+              const { x, y } = getEventXY(e);
+              setSlingshotPoint({ x, y });
+              if (y >= (Dimensions.get('window').height - 2)) {
+                if (slingshotStart) {
                   applySlingshotShot(slingshotStart, { x, y });
                 }
                 setSlingshotDragging(false);
                 setSlingshotStart(null);
                 setSlingshotPoint(null);
-              }}
-              style={{ position: 'absolute', bottom: 0, left: 0, right: 0, top: -140, justifyContent: 'flex-end', alignItems: 'center' }}
-            >
-              {!slingshotDragging && (
-                <>
-                  {/* Idle ghost target and instruction */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 190, alignItems: 'center' }}>
-                    <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,213,79,0.35)' }} />
-                    <View style={{ position: 'absolute', top: -18, width: 2, height: 26, backgroundColor: 'rgba(255,213,79,0.35)' }} />
+              }
+            }}
+            onTouchEnd={(e: any) => {
+              if (slingshotDragging && slingshotStart) {
+                const { x, y } = getEventXY(e);
+                applySlingshotShot(slingshotStart, { x, y });
+              }
+              setSlingshotDragging(false);
+              setSlingshotStart(null);
+              setSlingshotPoint(null);
+            }}
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'flex-end', alignItems: 'center', zIndex: 1500 }}
+          >
+            {!slingshotDragging && (
+              <>
+                {/* Idle ghost target and instruction */}
+                <View style={{ position: 'absolute', left: 0, right: 0, bottom: 190, alignItems: 'center' }}>
+                  <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,213,79,0.35)' }} />
+                  <View style={{ position: 'absolute', top: -18, width: 2, height: 26, backgroundColor: 'rgba(255,213,79,0.35)' }} />
+                </View>
+                <View style={{ position: 'absolute', left: 0, right: 0, bottom: 140, alignItems: 'center' }}>
+                  <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12, textAlign: 'center' }}>Drag anywhere and release to swing</Text>
+                    <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10, textAlign: 'center', marginTop: 2 }}>Horizontal = shape/face • Vertical = attack</Text>
                   </View>
-                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 140, alignItems: 'center' }}>
-                    <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
-                      <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12, textAlign: 'center' }}>Drag to pull back — release to swing</Text>
-                      <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10, textAlign: 'center', marginTop: 2 }}>Horizontal = shape/face • Vertical = attack</Text>
-                    </View>
+                </View>
+              </>
+            )}
+            {slingshotDragging && slingshotStart && slingshotPoint && (() => {
+              const ui = getSlingshotUI();
+              if (!ui) return null;
+              const lineX = slingshotPoint.x;
+              const lineY = slingshotPoint.y;
+              const originX = slingshotStart.x;
+              const originY = slingshotStart.y;
+              const normDx = ui.dx / Math.max(1, ui.dist);
+              const normDy = ui.dy / Math.max(1, ui.dist);
+              const guideLength = Math.min(ui.dist, MAX_DRAG);
+              const backX = originX + normDx * guideLength;
+              const backY = originY + normDy * guideLength;
+              const powerColor = `rgba(255, 215, 64, ${0.25 + 0.5 * ui.strength})`;
+              return (
+                <>
+                  {/* Origin */}
+                  <View style={{ position: 'absolute', left: originX - 5, top: originY - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFD54F', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
+                  {/* Pull line */}
+                  <View style={{ position: 'absolute', left: Math.min(originX, backX), top: Math.min(originY, backY), width: Math.abs(backX - originX) || 2, height: Math.abs(backY - originY) || 2, backgroundColor: powerColor, borderRadius: 3, opacity: 0.85 }} />
+                  {/* Arrow head */}
+                  <View style={{ position: 'absolute', left: backX - 7, top: backY - 7, width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFC107', shadowColor: '#000', shadowOpacity: 0.45, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
+                  {/* Power ring */}
+                  <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#FFD54F', opacity: 0.25 }} />
+                  <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, overflow: 'hidden', transform: [{ rotate: `${ui.angleDeg + 90}deg` }] }}>
+                    <View style={{ position: 'absolute', left: 32 - 32, top: 32 - 64, width: 64, height: 64 * ui.strength, backgroundColor: powerColor }} />
+                  </View>
+                  {/* HUD */}
+                  <View style={{ position: 'absolute', left: originX + 14, top: originY - 52, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }}>
+                    <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12 }}>{ui.power}%</Text>
+                    <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10 }}>{ui.angleDeg.toFixed(0)}°</Text>
                   </View>
                 </>
-              )}
-              {slingshotDragging && slingshotStart && slingshotPoint && (() => {
-                const ui = getSlingshotUI();
-                if (!ui) return null;
-                const lineX = slingshotPoint.x;
-                const lineY = slingshotPoint.y;
-                const originX = slingshotStart.x;
-                const originY = slingshotStart.y;
-                const normDx = ui.dx / Math.max(1, ui.dist);
-                const normDy = ui.dy / Math.max(1, ui.dist);
-                const guideLength = Math.min(ui.dist, MAX_DRAG);
-                const backX = originX + normDx * guideLength;
-                const backY = originY + normDy * guideLength;
-                const powerColor = `rgba(255, 215, 64, ${0.25 + 0.5 * ui.strength})`;
-                return (
-                  <>
-                    {/* Origin */}
-                    <View style={{ position: 'absolute', left: originX - 5, top: originY - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFD54F', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
-                    {/* Pull line */}
-                    <View style={{ position: 'absolute', left: Math.min(originX, backX), top: Math.min(originY, backY), width: Math.abs(backX - originX) || 2, height: Math.abs(backY - originY) || 2, backgroundColor: powerColor, borderRadius: 3, opacity: 0.85 }} />
-                    {/* Arrow head */}
-                    <View style={{ position: 'absolute', left: backX - 7, top: backY - 7, width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFC107', shadowColor: '#000', shadowOpacity: 0.45, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
-                    {/* Power ring */}
-                    <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#FFD54F', opacity: 0.25 }} />
-                    <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, overflow: 'hidden', transform: [{ rotate: `${ui.angleDeg + 90}deg` }] }}>
-                      <View style={{ position: 'absolute', left: 32 - 32, top: 32 - 64, width: 64, height: 64 * ui.strength, backgroundColor: powerColor }} />
-                    </View>
-                    {/* HUD */}
-                    <View style={{ position: 'absolute', left: originX + 14, top: originY - 52, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }}>
-                      <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12 }}>{ui.power}%</Text>
-                      <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10 }}>{ui.angleDeg.toFixed(0)}°</Text>
-                    </View>
-                  </>
-                );
-              })()}
-            </View>
-          )}
+              );
+            })()}
+          </View>
+        )}
+
+        {/* Floating PUTT Button with Mode Selector */}
+        <View style={styles.floatingPuttContainer}>
 
           {gameMode !== 'swing' && (
           <View style={styles.puttButtonGroup}>
