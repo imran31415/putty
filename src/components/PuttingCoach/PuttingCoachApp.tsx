@@ -441,13 +441,16 @@ function PuttingCoachAppCore() {
     if (nextLevel.introText) {
       setChallengeIntroText(nextLevel.introText);
       setShowChallengeIntro(true);
-      setTimeout(() => setShowChallengeIntro(false), 6000);
     }
     // Reset input overlays
     setSlingshotDragging(false);
     setSlingshotStart(null);
     setSlingshotPoint(null);
   };
+
+  const currentLevelConfig = currentLevel != null
+    ? LEVEL_CONFIGS.find(l => l.id === currentLevel)
+    : null;
 
   return (
     <View style={styles.container}>
@@ -968,19 +971,42 @@ function PuttingCoachAppCore() {
           </View>
         )}
 
-        {/* Challenge Intro Tooltip */}
+        {/* Challenge Intro Bottom Sheet (Expanded with tips) */}
         {showChallengeIntro && (
-          <TouchableWithoutFeedback onPress={() => setShowChallengeIntro(false)}>
-            <View style={styles.challengeIntroTooltip}>
+          <View style={styles.challengeIntroTooltip}>
+            <View style={styles.introHeaderRow}>
+              <Text style={styles.introTitleText} numberOfLines={1}>
+                {currentLevelConfig?.name || 'Challenge Intro'}
+              </Text>
               <TouchableOpacity
                 style={styles.challengeIntroClose}
                 onPress={() => setShowChallengeIntro(false)}
+                accessibilityLabel="Close intro"
               >
                 <Text style={styles.challengeIntroCloseText}>✕</Text>
               </TouchableOpacity>
-              <Text style={styles.challengeIntroText}>{challengeIntroText}</Text>
             </View>
-          </TouchableWithoutFeedback>
+            <Text style={styles.introSubtitleText} numberOfLines={2}>
+              {currentLevelConfig?.description || ''}
+            </Text>
+            <ScrollView style={styles.introScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.challengeIntroText}>{challengeIntroText}</Text>
+              <View style={styles.tipList}>
+                <Text style={styles.tipHeading}>Tips</Text>
+                <View style={styles.tipItem}><Text style={styles.tipBullet}>•</Text><Text style={styles.tipText}>Drag down and release to swing; horizontal pull shapes the shot.</Text></View>
+                <View style={styles.tipItem}><Text style={styles.tipBullet}>•</Text><Text style={styles.tipText}>Use the club selector to pick the right club for the distance.</Text></View>
+                <View style={styles.tipItem}><Text style={styles.tipBullet}>•</Text><Text style={styles.tipText}>Watch the HUD for remaining yards and adjust power accordingly.</Text></View>
+                <View style={styles.tipItem}><Text style={styles.tipBullet}>•</Text><Text style={styles.tipText}>On the green, aim accounts for left/right slope and speed.</Text></View>
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.introPrimaryButton}
+              onPress={() => setShowChallengeIntro(false)}
+              accessibilityLabel="Let’s go"
+            >
+              <Text style={styles.introPrimaryButtonText}>Let’s go</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Level Selection Button */}
@@ -1055,7 +1081,6 @@ function PuttingCoachAppCore() {
                       if (level.introText && level.introText.trim()) {
                         setChallengeIntroText(level.introText);
                         setShowChallengeIntro(true);
-                        setTimeout(() => setShowChallengeIntro(false), 6000);
                       }
 
                       setShowControls(false);
@@ -1509,26 +1534,98 @@ const styles = StyleSheet.create({
   },
   challengeIntroTooltip: {
     position: 'absolute',
-    top: '40%',
-    left: 40,
-    right: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 20,
-    padding: 25,
-    borderWidth: 2,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: '20%',
+    backgroundColor: 'rgba(0, 0, 0, 0.96)',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 2,
     borderColor: '#FFD700',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 30,
+    zIndex: 3000,
+  },
+  introHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  introTitleText: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: '800',
+    flex: 1,
+    paddingRight: 36,
+    textAlign: 'left',
+  },
+  introSubtitleText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  introScroll: {
+    maxHeight: screenHeight * 0.4,
   },
   challengeIntroText: {
     color: '#fff',
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 22,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  tipList: {
+    marginTop: 14,
+  },
+  tipHeading: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'left',
+  },
+  tipItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  tipBullet: {
+    color: '#FFD700',
+    width: 14,
+    textAlign: 'center',
+  },
+  tipText: {
+    color: 'rgba(255,255,255,0.95)',
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  introPrimaryButton: {
+    marginTop: 14,
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  introPrimaryButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '800',
   },
   challengeIntroClose: {
     position: 'absolute',
