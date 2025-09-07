@@ -123,9 +123,9 @@ export function calculateCarryDistance(
 
 // Naive distance → club suggestion (can be tuned later)
 export function suggestClubForDistance(distanceYards: number): ClubType {
-  if (distanceYards <= 15) return 'sw-chip';
-  if (distanceYards <= 60) return 'sw';
-  if (distanceYards <= 95) return 'sw'; // explicitly satisfy 99yd → SW rule below
+  // Chipping by default for anything inside 40 yards
+  if (distanceYards <= 40) return 'sw-chip';
+  if (distanceYards <= 95) return 'sw';
   if (distanceYards <= 115) return 'pw';
   if (distanceYards <= 135) return '9iron';
   if (distanceYards <= 160) return '7iron';

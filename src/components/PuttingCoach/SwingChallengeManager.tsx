@@ -353,8 +353,12 @@ export function getDisplayDistance(yards: number): { value: number; unit: string
  */
 export const SwingChallengeHUD: React.FC<{
   progress: SwingChallengeProgress;
-}> = ({ progress }) => {
+  lastShotResult?: SwingShotResult | null;
+}> = ({ progress, lastShotResult }) => {
   const displayDistance = getDisplayDistance(progress.remainingYards);
+  const lastShotText = lastShotResult
+    ? `${CLUB_DATA[lastShotResult.club]?.shortName || 'SHOT'} ${(lastShotResult.total || lastShotResult.carry).toFixed(0)}yd`
+    : '—';
 
   return (
     <View style={styles.hudContainer}>
@@ -373,6 +377,10 @@ export const SwingChallengeHUD: React.FC<{
       <View style={styles.hudRow}>
         <Text style={styles.hudLabel}>Position</Text>
         <Text style={styles.hudValue}>{Math.round(progress.ballPositionYards)} yards</Text>
+      </View>
+      <View style={styles.hudRow}>
+        <Text style={styles.hudLabel}>Last Shot</Text>
+        <Text style={[styles.hudValue, { color: '#FFD54F' }]}>{lastShotText}</Text>
       </View>
     </View>
   );
@@ -451,7 +459,7 @@ export const HoleCompletionSummary: React.FC<{
 const styles = StyleSheet.create({
   hudContainer: {
     position: 'absolute',
-    top: 200, // Move further down to avoid bird's eye view
+    top: 100, // Move further down to avoid bird's eye view
     right: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.85)', // More opaque
     padding: 8,

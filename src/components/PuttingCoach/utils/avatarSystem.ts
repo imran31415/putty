@@ -357,7 +357,77 @@ export const createAvatarTexture = (animFrame: number = 0, animType: string = 'i
   return new THREE.CanvasTexture(canvas);
 };
 
-// Create player avatar with articulated animation
+// Pose calculation shared by 2D (legacy) and new 3D avatar
+const computePose = (
+  animFrame: number,
+  animType: string,
+  avatarState: AvatarState
+) => {
+  let bodyRotation = 0;
+  let armRotation = 0;
+  let clubRotation = 0;
+  let hipRotation = 0;
+  let shoulderRotation = 0;
+  let legBend = 0;
+
+  if (animType === 'swing') {
+    const progress = animFrame / 20;
+    if (progress < 0.3) {
+      const backswingProg = progress / 0.3;
+      bodyRotation = backswingProg * Math.PI / 8;
+      armRotation = backswingProg * Math.PI / 3;
+      clubRotation = backswingProg * Math.PI * 0.8;
+      hipRotation = backswingProg * Math.PI / 12;
+      shoulderRotation = backswingProg * Math.PI / 6;
+    } else if (progress < 0.4) {
+      bodyRotation = Math.PI / 8;
+      armRotation = Math.PI / 3;
+      clubRotation = Math.PI * 0.8;
+      hipRotation = Math.PI / 12;
+      shoulderRotation = Math.PI / 6;
+    } else if (progress < 0.6) {
+      const downswingProg = (progress - 0.4) / 0.2;
+      bodyRotation = Math.PI / 8 - downswingProg * Math.PI / 6;
+      armRotation = Math.PI / 3 - downswingProg * Math.PI / 3;
+      clubRotation = Math.PI * 0.8 - downswingProg * Math.PI * 1.3;
+      hipRotation = Math.PI / 12 - downswingProg * Math.PI / 8;
+      shoulderRotation = Math.PI / 6 - downswingProg * Math.PI / 4;
+      legBend = downswingProg * 0.1;
+    } else if (progress < 0.7) {
+      bodyRotation = -Math.PI / 24;
+      armRotation = 0;
+      clubRotation = -Math.PI * 0.5;
+      hipRotation = -Math.PI / 24;
+      shoulderRotation = -Math.PI / 12;
+      legBend = 0.1;
+    } else {
+      const followProg = (progress - 0.7) / 0.3;
+      bodyRotation = -Math.PI / 24 - followProg * Math.PI / 8;
+      armRotation = -followProg * Math.PI / 4;
+      clubRotation = -Math.PI * 0.5 - followProg * Math.PI * 0.4;
+      hipRotation = -Math.PI / 24 - followProg * Math.PI / 8;
+      shoulderRotation = -Math.PI / 12 - followProg * Math.PI / 6;
+      legBend = 0.1 - followProg * 0.1;
+    }
+  } else if (animType === 'putt') {
+    const progress = animFrame / 15;
+    if (progress < 0.4) {
+      const backstrokeProg = progress / 0.4;
+      armRotation = -backstrokeProg * Math.PI / 8;
+      clubRotation = -backstrokeProg * Math.PI / 8;
+      shoulderRotation = -backstrokeProg * Math.PI / 16;
+    } else {
+      const forwardProg = (progress - 0.4) / 0.6;
+      armRotation = -Math.PI / 8 + forwardProg * Math.PI / 6;
+      clubRotation = -Math.PI / 8 + forwardProg * Math.PI / 4;
+      shoulderRotation = -Math.PI / 16 + forwardProg * Math.PI / 12;
+    }
+  }
+
+  return { bodyRotation, armRotation, clubRotation, hipRotation, shoulderRotation, legBend };
+};
+
+// Create player avatar with articulated 3D meshes (replaces legacy sprite)
 export const createPlayerAvatar = (scene: THREE.Scene, clubType?: string) => {
   // Remove existing avatar if any
   const existingAvatar = scene.children.find(child => child.userData && child.userData.isPlayerAvatar);
@@ -377,56 +447,124 @@ export const createPlayerAvatar = (scene: THREE.Scene, clubType?: string) => {
     clubType: clubType || 'putter'
   };
   
-  const avatarTexture = createAvatarTexture(0, 'idle', avatarState);
-  avatarTexture.minFilter = THREE.LinearFilter;
-  avatarTexture.magFilter = THREE.LinearFilter;
-  
-  const avatarMaterial = new THREE.SpriteMaterial({
-    map: avatarTexture,
-    transparent: true,
-  });
-  
-  const playerAvatar = new THREE.Sprite(avatarMaterial);
-  
-  // Position avatar to the side of the ball (already facing east in texture)
-  playerAvatar.position.set(
-    -0.8,  // To the left of ball
-    1.0,   // Height
-    4.2    // Slightly behind ball for better view
-  );
-  
-  playerAvatar.scale.set(2, 2, 1);
+  // Materials
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xf7c6b2, roughness: 0.6, metalness: 0.0 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0x3aa0ff, roughness: 0.45, metalness: 0.2, envMapIntensity: 0.25, emissive: 0x0a2b57, emissiveIntensity: 0.12 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1f2a38, roughness: 0.7, metalness: 0.1 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.4 });
+  const clubMat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, roughness: 0.3, metalness: 0.9 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.35, metalness: 0.15 });
+
+  // Geometry helpers
+  const cyl = (rTop: number, rBot: number, h: number, mat: THREE.Material, radial: number = 12) => new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, radial), mat as any);
+  const sph = (r: number, mat: THREE.Material, seg: number = 16) => new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), mat as any);
+  const box = (x: number, y: number, z: number, mat: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(x, y, z), mat as any);
+
+  // Rig
+  const playerAvatar = new THREE.Group();
+  playerAvatar.position.set(-0.8, 1.0, 4.2);
   playerAvatar.userData.isPlayerAvatar = true;
   playerAvatar.userData.avatarState = avatarState;
   playerAvatar.renderOrder = 10;
   scene.add(playerAvatar);
-  
-  // Add shadow
+
+  const hips = new THREE.Group();
+  playerAvatar.add(hips);
+
+  // Legs
+  const leftLeg = cyl(0.06, 0.08, 0.6, pantsMat);
+  leftLeg.position.set(-0.08, 0.3, 0);
+  hips.add(leftLeg);
+  const rightLeg = cyl(0.06, 0.08, 0.6, pantsMat);
+  rightLeg.position.set(0.08, 0.3, 0);
+  hips.add(rightLeg);
+  const leftShoe = box(0.18, 0.07, 0.30, shoeMat); leftShoe.position.set(-0.08, -0.31, 0.08); leftLeg.add(leftShoe);
+  const rightShoe = box(0.18, 0.07, 0.30, shoeMat); rightShoe.position.set(0.08, -0.31, 0.08); rightLeg.add(rightShoe);
+
+  // Torso + shoulders
+  const torsoGroup = new THREE.Group();
+  torsoGroup.position.set(0, 0.65, 0);
+  hips.add(torsoGroup);
+  const torso = box(0.38, 0.52, 0.24, shirtMat);
+  torso.position.set(0, 0.25, 0);
+  torsoGroup.add(torso);
+  // slight taper for torso
+  torso.scale.set(1.0, 1.0, 1.0);
+
+  const shoulders = new THREE.Group();
+  shoulders.position.set(0, 0.5, 0);
+  torsoGroup.add(shoulders);
+
+  // Head
+  const neck = cyl(0.06, 0.06, 0.1, skinMat, 10); neck.position.set(0, 0.55, 0); torsoGroup.add(neck);
+  const head = sph(0.145, skinMat); head.position.set(0, 0.69, 0.02); torsoGroup.add(head);
+  const cap = new THREE.Group();
+  const capTop = sph(0.15, capMat, 16); capTop.scale.set(1.05, 0.6, 1.05); capTop.position.set(0, 0.72, 0.02); torsoGroup.add(capTop);
+  const capBill = box(0.24, 0.04, 0.10, capMat); capBill.position.set(0.12, 0.68, 0.02); capBill.rotation.z = -0.18; torsoGroup.add(capBill);
+
+  // Arms
+  const leftUpperArm = cyl(0.05, 0.06, 0.28, shirtMat); leftUpperArm.position.set(-0.22, 0.45, 0); leftUpperArm.rotation.z = Math.PI / 2.8; shoulders.add(leftUpperArm);
+  const leftForeArm = cyl(0.045, 0.055, 0.26, skinMat); leftForeArm.position.set(0, -0.14, 0.12); leftForeArm.rotation.z = 0.2; leftUpperArm.add(leftForeArm);
+  const leftHand = sph(0.04, skinMat); leftHand.position.set(0, -0.16, 0.16); leftForeArm.add(leftHand);
+
+  const rightUpperArm = cyl(0.05, 0.06, 0.28, shirtMat); rightUpperArm.position.set(0.22, 0.45, 0); rightUpperArm.rotation.z = Math.PI / 2.5; shoulders.add(rightUpperArm);
+  const rightForeArm = cyl(0.045, 0.055, 0.26, skinMat); rightForeArm.position.set(0, -0.14, 0.12); rightForeArm.rotation.z = 0.15; rightUpperArm.add(rightForeArm);
+  const rightHand = sph(0.04, skinMat); rightHand.position.set(0, -0.16, 0.16); rightForeArm.add(rightHand);
+
+  // Club attached to right hand
+  const clubGroup = new THREE.Group();
+  rightHand.add(clubGroup);
+  clubGroup.position.set(0, 0, 0);
+  const grip = box(0.05, 0.18, 0.05, new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.1 })); grip.position.set(0, -0.10, 0); clubGroup.add(grip);
+  const shaft = cyl(0.01, 0.012, 0.9, clubMat, 8); shaft.position.set(0, -0.55, 0); clubGroup.add(shaft);
+  const isPutter = !avatarState.clubType || avatarState.clubType === 'putter';
+  const isWood = avatarState.clubType && (avatarState.clubType.includes('wood') || avatarState.clubType === 'driver');
+  const headGeom = isPutter ? box(0.20, 0.06, 0.10, new THREE.MeshStandardMaterial({ color: 0xb0b0b0, roughness: 0.3, metalness: 0.8 }))
+    : isWood ? sph(0.11, new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.6 }))
+    : box(0.18, 0.06, 0.08, new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.25, metalness: 0.85 }));
+  headGeom.position.set(0, -1.00, 0.04); clubGroup.add(headGeom);
+
+  // Shadow
   const avatarShadow = new THREE.Mesh(
     new THREE.PlaneGeometry(1.2, 0.3),
-    new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.3,
-      side: THREE.DoubleSide,
-    })
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
   );
   avatarShadow.rotation.x = -Math.PI / 2;
-  avatarShadow.position.set(-0.8, 0.01, 4.2); // Match avatar position
+  avatarShadow.position.set(-0.8, 0.01, 4.2);
   avatarShadow.userData.isPlayerAvatarShadow = true;
   scene.add(avatarShadow);
-  
-  // Animation update function
+
+  // Animation update function using 3D rig
   const updateAvatarAnimation = (frame: number, type: string) => {
     avatarState.frame = frame;
     avatarState.animationType = type;
-    const newTexture = createAvatarTexture(frame, type, avatarState);
-    newTexture.minFilter = THREE.LinearFilter;
-    newTexture.magFilter = THREE.LinearFilter;
-    avatarMaterial.map = newTexture;
-    avatarMaterial.needsUpdate = true;
+    const pose = computePose(frame, type, avatarState);
+
+    // Body and hips
+    hips.rotation.y = 0; // facing camera
+    hips.rotation.z = pose.hipRotation;
+
+    // Torso/shoulders/head
+    torsoGroup.rotation.z = 0;
+    shoulders.rotation.z = pose.shoulderRotation;
+
+    // Arms
+    leftUpperArm.rotation.z = Math.PI / 2.8 + pose.armRotation * 0.8;
+    rightUpperArm.rotation.z = Math.PI / 2.5 + pose.armRotation;
+
+    // Forearms follow slightly
+    leftForeArm.rotation.z = 0.2 + pose.armRotation * 0.2;
+    rightForeArm.rotation.z = 0.15 + pose.armRotation * 0.25;
+
+    // Legs
+    leftLeg.rotation.z = pose.legBend;
+    rightLeg.rotation.z = -pose.legBend * 0.5;
+
+    // Club
+    clubGroup.rotation.z = Math.PI + Math.PI / 1.8 + pose.clubRotation;
   };
   
+  // Add shadow
   // Store references and functions
   (window as any).playerAvatar = playerAvatar;
   (window as any).playerAvatarShadow = avatarShadow;

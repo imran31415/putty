@@ -366,6 +366,16 @@ function PuttingCoachAppCore() {
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
   const MAX_DRAG = 180; // pixels for full power
 
+  // Robust coordinate helper for touch/mouse across platforms
+  const getEventXY = (e: any) => {
+    const ne = e?.nativeEvent || e;
+    const t = ne.touches && ne.touches[0] ? ne.touches[0] : (ne.changedTouches && ne.changedTouches[0] ? ne.changedTouches[0] : ne);
+    return {
+      x: t.locationX ?? t.offsetX ?? t.pageX ?? 0,
+      y: t.locationY ?? t.offsetY ?? t.pageY ?? 0,
+    };
+  };
+
   const applySlingshotShot = (start: {x:number;y:number}, end: {x:number;y:number}) => {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
@@ -395,39 +405,62 @@ function PuttingCoachAppCore() {
     return { dx, dy, dist, strength, angleRad, angleDeg, power };
   };
 
+  // --- Robust finalize helpers to avoid stuck UI after hole completion ---
+  const finalizeAndReturnToMenu = () => {
+    setChallengeComplete(false);
+    setIsChallengMode(false);
+    setCurrentLevel(null);
+    setChallengeAttempts(0);
+    setSwingChallengeProgress(null);
+    setGameMode('putt');
+    resetSettings();
+    setCurrentCourseHole(null);
+    setCurrentCoursePin(null);
+    setShowCourseFeatures(false);
+    setShowControls(false);
+    setShowLevelSelect(true);
+    // Ensure slingshot state is cleared
+    setSlingshotDragging(false);
+    setSlingshotStart(null);
+    setSlingshotPoint(null);
+  };
+
+  const finalizeAndStartNext = (nextLevel: LevelConfig) => {
+    setChallengeComplete(false);
+    const progress = initializeSwingChallenge(
+      nextLevel.id,
+      nextLevel.name,
+      nextLevel.holeDistance,
+      nextLevel.par || 4
+    );
+    setSwingChallengeProgress(progress);
+    setChallengeAttempts(0);
+    setCurrentLevel(nextLevel.id);
+    setSwingHoleYards(nextLevel.holeDistance);
+    setGameMode('swing');
+    if (nextLevel.introText) {
+      setChallengeIntroText(nextLevel.introText);
+      setShowChallengeIntro(true);
+      setTimeout(() => setShowChallengeIntro(false), 6000);
+    }
+    // Reset input overlays
+    setSlingshotDragging(false);
+    setSlingshotStart(null);
+    setSlingshotPoint(null);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor="#ffffff" />
 
-      {/* Animated PUTTY Header */}
-      <View style={styles.headerContainer}>
-        <View style={styles.logoContainer}>
-          {['P', 'U', 'T', 'T', 'Y'].map((letter, index) => (
-            <Text
-              key={index}
-              style={[
-                styles.logoLetter,
-                {
-                  color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'][index],
-                }
-              ]}
-            >
-              {letter}
-            </Text>
-          ))}
-        </View>
-        <Text style={styles.subtitle}>PUTTING CHALLENGE</Text>
-      </View>
+      {/* Header removed by request */}
 
-      {/* Swing Challenge HUD */}
+      {/* Compact unified HUD */}
       {swingChallengeProgress && swingChallengeProgress.isActive && (
-        <SwingChallengeHUD progress={swingChallengeProgress} />
+        <SwingChallengeHUD progress={swingChallengeProgress} lastShotResult={lastShotResult} />
       )}
 
-      {/* Shot Summary */}
-      {showShotSummary && lastShotResult && swingChallengeProgress && !showControls && (
-        <ShotSummary shotResult={lastShotResult} progress={swingChallengeProgress} />
-      )}
+      {/* Shot Summary removed in favor of unified HUD */}
 
       {/* Hole Completion Modal */}
       {challengeComplete && swingChallengeProgress && swingChallengeProgress.isActive && (
@@ -438,36 +471,10 @@ function PuttingCoachAppCore() {
             onPress={() => {
               const nextLevelId = (swingChallengeProgress?.challengeId || 100) + 1;
               const nextLevel = LEVEL_CONFIGS.find(l => l.id === nextLevelId);
-
               if (nextLevel) {
-                setChallengeComplete(false);
-                const progress = initializeSwingChallenge(
-                  nextLevel.id,
-                  nextLevel.name,
-                  nextLevel.holeDistance,
-                  nextLevel.par || 4
-                );
-                setSwingChallengeProgress(progress);
-                setCurrentLevel(nextLevel.id);
-                setSwingHoleYards(nextLevel.holeDistance);
-                setGameMode('swing');
-
-                if (nextLevel.introText) {
-                  setChallengeIntroText(nextLevel.introText);
-                  setShowChallengeIntro(true);
-                  setTimeout(() => setShowChallengeIntro(false), 6000);
-                }
+                finalizeAndStartNext(nextLevel);
               } else {
-                // Only one challenge available; return to root and clear scenery
-                setChallengeComplete(false);
-                setIsChallengMode(false);
-                setCurrentLevel(null);
-                setSwingChallengeProgress(null);
-                setGameMode('putt');
-                resetSettings();
-                setCurrentCourseHole(null);
-                setCurrentCoursePin(null);
-                setShowCourseFeatures(false);
+                finalizeAndReturnToMenu();
               }
             }}
           >
@@ -522,20 +529,58 @@ function PuttingCoachAppCore() {
               onStartShouldSetResponder={() => true}
               onMoveShouldSetResponder={() => true}
               onResponderGrant={(e: any) => {
-                const { locationX, locationY } = e.nativeEvent;
-                setSlingshotStart({ x: locationX, y: locationY });
-                setSlingshotPoint({ x: locationX, y: locationY });
+                const { x, y } = getEventXY(e);
+                setSlingshotStart({ x, y });
+                setSlingshotPoint({ x, y });
                 setSlingshotDragging(true);
               }}
               onResponderMove={(e: any) => {
                 if (!slingshotDragging) return;
-                const { locationX, locationY } = e.nativeEvent;
-                setSlingshotPoint({ x: locationX, y: locationY });
+                const { x, y } = getEventXY(e);
+                setSlingshotPoint({ x, y });
+                // If dragged beyond bottom, auto-release for smooth UX
+                if (y >= (Dimensions.get('window').height - 2)) {
+                  if (slingshotStart) {
+                    applySlingshotShot(slingshotStart, { x, y });
+                  }
+                  setSlingshotDragging(false);
+                  setSlingshotStart(null);
+                  setSlingshotPoint(null);
+                }
               }}
               onResponderRelease={(e: any) => {
                 if (slingshotDragging && slingshotStart) {
-                  const { locationX, locationY } = e.nativeEvent;
-                  applySlingshotShot(slingshotStart, { x: locationX, y: locationY });
+                  const { x, y } = getEventXY(e);
+                  applySlingshotShot(slingshotStart, { x, y });
+                }
+                setSlingshotDragging(false);
+                setSlingshotStart(null);
+                setSlingshotPoint(null);
+              }}
+              // Touch fallback so first press engages immediately on some platforms
+              onTouchStart={(e: any) => {
+                const { x, y } = getEventXY(e);
+                setSlingshotStart({ x, y });
+                setSlingshotPoint({ x, y });
+                setSlingshotDragging(true);
+              }}
+              onTouchMove={(e: any) => {
+                if (!slingshotDragging) return;
+                const { x, y } = getEventXY(e);
+                setSlingshotPoint({ x, y });
+                if (y >= (Dimensions.get('window').height - 2)) {
+                  if (slingshotStart) {
+                    applySlingshotShot(slingshotStart, { x, y });
+                  }
+                  setSlingshotDragging(false);
+                  setSlingshotStart(null);
+                  setSlingshotPoint(null);
+                }
+              }}
+              onTouchEnd={(e: any) => {
+                if (slingshotDragging && slingshotStart) {
+                  const { x, y } = getEventXY(e);
+                  applySlingshotShot(slingshotStart, { x, y });
                 }
                 setSlingshotDragging(false);
                 setSlingshotStart(null);
@@ -546,11 +591,11 @@ function PuttingCoachAppCore() {
               {!slingshotDragging && (
                 <>
                   {/* Idle ghost target and instruction */}
-                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 160, alignItems: 'center' }}>
+                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 190, alignItems: 'center' }}>
                     <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,213,79,0.35)' }} />
                     <View style={{ position: 'absolute', top: -18, width: 2, height: 26, backgroundColor: 'rgba(255,213,79,0.35)' }} />
                   </View>
-                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 110, alignItems: 'center' }}>
+                  <View style={{ position: 'absolute', left: 0, right: 0, bottom: 140, alignItems: 'center' }}>
                     <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
                       <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12, textAlign: 'center' }}>Drag to pull back — release to swing</Text>
                       <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10, textAlign: 'center', marginTop: 2 }}>Horizontal = shape/face • Vertical = attack</Text>
@@ -570,22 +615,22 @@ function PuttingCoachAppCore() {
                 const guideLength = Math.min(ui.dist, MAX_DRAG);
                 const backX = originX + normDx * guideLength;
                 const backY = originY + normDy * guideLength;
-                const powerColor = `rgba(255, 215, 64, ${0.3 + 0.4 * ui.strength})`;
+                const powerColor = `rgba(255, 215, 64, ${0.25 + 0.5 * ui.strength})`;
                 return (
                   <>
                     {/* Origin */}
-                    <View style={{ position: 'absolute', left: originX - 4, top: originY - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFD54F' }} />
+                    <View style={{ position: 'absolute', left: originX - 5, top: originY - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFD54F', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
                     {/* Pull line */}
-                    <View style={{ position: 'absolute', left: Math.min(originX, backX), top: Math.min(originY, backY), width: Math.abs(backX - originX) || 2, height: Math.abs(backY - originY) || 2, backgroundColor: powerColor, borderRadius: 2, opacity: 0.8 }} />
+                    <View style={{ position: 'absolute', left: Math.min(originX, backX), top: Math.min(originY, backY), width: Math.abs(backX - originX) || 2, height: Math.abs(backY - originY) || 2, backgroundColor: powerColor, borderRadius: 3, opacity: 0.85 }} />
                     {/* Arrow head */}
-                    <View style={{ position: 'absolute', left: backX - 6, top: backY - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFC107', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
+                    <View style={{ position: 'absolute', left: backX - 7, top: backY - 7, width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFC107', shadowColor: '#000', shadowOpacity: 0.45, shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }} />
                     {/* Power ring */}
-                    <View style={{ position: 'absolute', left: originX - 30, top: originY - 30, width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#FFD54F', opacity: 0.25 }} />
-                    <View style={{ position: 'absolute', left: originX - 30, top: originY - 30, width: 60, height: 60, borderRadius: 30, overflow: 'hidden', transform: [{ rotate: `${ui.angleDeg + 90}deg` }] }}>
-                      <View style={{ position: 'absolute', left: 30 - 30, top: 30 - 60, width: 60, height: 60 * ui.strength, backgroundColor: powerColor }} />
+                    <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#FFD54F', opacity: 0.25 }} />
+                    <View style={{ position: 'absolute', left: originX - 32, top: originY - 32, width: 64, height: 64, borderRadius: 32, overflow: 'hidden', transform: [{ rotate: `${ui.angleDeg + 90}deg` }] }}>
+                      <View style={{ position: 'absolute', left: 32 - 32, top: 32 - 64, width: 64, height: 64 * ui.strength, backgroundColor: powerColor }} />
                     </View>
                     {/* HUD */}
-                    <View style={{ position: 'absolute', left: originX + 14, top: originY - 48, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }}>
+                    <View style={{ position: 'absolute', left: originX + 14, top: originY - 52, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }}>
                       <Text style={{ color: '#FFD54F', fontWeight: '800', fontSize: 12 }}>{ui.power}%</Text>
                       <Text style={{ color: '#E3F2FD', fontWeight: '600', fontSize: 10 }}>{ui.angleDeg.toFixed(0)}°</Text>
                     </View>
@@ -717,51 +762,14 @@ function PuttingCoachAppCore() {
               </View>
             </>
           ) : (
-            // Swing mode controls with gear icon for advanced controls
+            // Swing mode: collapsed by default; everything under Swing Settings
             <>
-              <TouchableOpacity
-                style={styles.mobileControlGroup}
-                onPress={() => setShowClubModal(true)}
-              >
-                <Text style={styles.mobileControlLabel}>Club</Text>
-                <View style={styles.mobileButtonRow}>
-                  <Text
-                    style={[
-                      styles.mobileControlValue,
-                      { color: CLUB_DATA[selectedClub].color, fontSize: 12 },
-                    ]}
-                  >
-                    {CLUB_DATA[selectedClub].shortName}
-                  </Text>
-                  <Text style={styles.mobileControlButtonText}>▼</Text>
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.mobileControlGroup}>
-                <Text style={styles.mobileControlLabel}>Pwr</Text>
-                <View style={styles.mobileButtonRow}>
-                  <TouchableOpacity
-                    style={styles.mobileControlButton}
-                    onPress={() => setSwingPower(Math.max(50, swingPower - 10))}
-                  >
-                    <Text style={styles.mobileControlButtonText}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.mobileControlValue}>{swingPower}%</Text>
-                  <TouchableOpacity
-                    style={styles.mobileControlButton}
-                    onPress={() => setSwingPower(Math.min(100, swingPower + 10))}
-                  >
-                    <Text style={styles.mobileControlButtonText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Advanced Controls Toggle with Gear Icon */}
+              {/* Swing Settings Toggle */}
               <TouchableOpacity
                 style={styles.mobileControlGroup}
                 onPress={() => setShowAdvancedSwingControls(!showAdvancedSwingControls)}
               >
-                <Text style={styles.mobileControlLabel}>⚙️</Text>
+                <Text style={styles.mobileControlLabel}>⚙️ Swing Settings</Text>
                 <View style={styles.mobileButtonRow}>
                   <Text style={styles.mobileControlValue}>
                     {showAdvancedSwingControls ? 'Hide' : 'Show'}
@@ -772,9 +780,45 @@ function PuttingCoachAppCore() {
                 </View>
               </TouchableOpacity>
 
-              {/* Advanced Controls (Hidden by default) */}
+              {/* Expanded settings contains Club + Power + Advanced controls */}
               {showAdvancedSwingControls && (
                 <>
+                  <TouchableOpacity
+                    style={styles.mobileControlGroup}
+                    onPress={() => setShowClubModal(true)}
+                  >
+                    <Text style={styles.mobileControlLabel}>Club</Text>
+                    <View style={styles.mobileButtonRow}>
+                      <Text
+                        style={[
+                          styles.mobileControlValue,
+                          { color: CLUB_DATA[selectedClub].color, fontSize: 12 },
+                        ]}
+                      >
+                        {CLUB_DATA[selectedClub].shortName}
+                      </Text>
+                      <Text style={styles.mobileControlButtonText}>▼</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={styles.mobileControlGroup}>
+                    <Text style={styles.mobileControlLabel}>Pwr</Text>
+                    <View style={styles.mobileButtonRow}>
+                      <TouchableOpacity
+                        style={styles.mobileControlButton}
+                        onPress={() => setSwingPower(Math.max(50, swingPower - 10))}
+                      >
+                        <Text style={styles.mobileControlButtonText}>-</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.mobileControlValue}>{swingPower}%</Text>
+                      <TouchableOpacity
+                        style={styles.mobileControlButton}
+                        onPress={() => setSwingPower(Math.min(100, swingPower + 10))}
+                      >
+                        <Text style={styles.mobileControlButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
               <View style={styles.mobileControlGroup}>
                 <Text style={styles.mobileControlLabel}>Face</Text>
                 <View style={styles.mobileButtonRow}>
@@ -856,7 +900,7 @@ function PuttingCoachAppCore() {
           )}
         </View>
 
-        {/* Compact Horizontal Dashboard */}
+        {/* Compact Horizontal Dashboard - simplified per request */}
         <View style={styles.dashboardBar}>
           {!showControls && (
             <TouchableOpacity style={styles.menuButton} onPress={toggleControls}>
@@ -864,132 +908,46 @@ function PuttingCoachAppCore() {
             </TouchableOpacity>
           )}
 
-          {gameMode === 'putt' ? (
-            <>
-              <View style={styles.dashboardItem}>
-                <Text style={styles.dashboardIcon}>⚡</Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>{distance.toFixed(1)}ft</Text>
-                  <Text style={styles.dashboardLabel}>Power</Text>
-                </View>
-              </View>
+          {/* Course/Hole + Distance banner */}
+          <View style={styles.dashboardItem}>
+            <Text style={styles.dashboardIcon}>⛳</Text>
+            <View style={styles.dashboardTextContainer}>
+              <Text style={styles.dashboardValue}>
+                {currentCourseHole ? `${currentCourseHole?.id?.split('-')[0]?.toUpperCase()} • Hole ${currentCourseHole?.number}` : 'Practice'}
+              </Text>
+              <Text style={styles.dashboardLabel}>Course</Text>
+            </View>
+          </View>
 
-              <View style={styles.dashboardItem}>
-                <Text style={styles.dashboardIcon}>🎯</Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>
-                    {holeDistance < 1
-                      ? `${(holeDistance * 12).toFixed(0)}"`
-                      : `${holeDistance.toFixed(1)}ft`}
-                  </Text>
-                  <Text style={styles.dashboardLabel}>To Hole</Text>
-                </View>
-              </View>
-
-              <View style={styles.dashboardItem}>
-                <Text style={styles.dashboardIcon}>🌱</Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>{greenSpeed}</Text>
-                  <Text style={styles.dashboardLabel}>Green</Text>
-                </View>
-              </View>
-
-              <View style={styles.dashboardItem}>
-                <Text style={styles.dashboardIcon}>⛰️</Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>
-                    {slopeUpDown === 0 && slopeLeftRight === 0
-                      ? 'Flat'
-                      : `${slopeUpDown > 0 ? `↑${slopeUpDown}` : slopeUpDown < 0 ? `↓${Math.abs(slopeUpDown)}` : ''}${slopeLeftRight > 0 ? `→${slopeLeftRight}` : slopeLeftRight < 0 ? `←${Math.abs(slopeLeftRight)}` : ''}`}
-                  </Text>
-                  <Text style={styles.dashboardLabel}>Slope</Text>
-                </View>
-              </View>
-            </>
-          ) : (
-            /* SWING MODE DASHBOARD */
-            <>
-              <TouchableOpacity
-                style={styles.dashboardItem}
-                onPress={() => {
-                  const clubs = getClubList();
-                  const currentIndex = clubs.indexOf(selectedClub);
-                  const nextIndex = (currentIndex + 1) % clubs.length;
-                  setSelectedClub(clubs[nextIndex]);
-                }}
-              >
-                <Text style={styles.dashboardIcon}>🏌️</Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={[styles.dashboardValue, { color: CLUB_DATA[selectedClub].color }]}>
-                    {CLUB_DATA[selectedClub].shortName}
-                  </Text>
-                  <Text style={styles.dashboardLabel}>Club</Text>
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.dashboardItem}>
-                <TouchableOpacity
-                  style={styles.quickAdjustButton}
-                  onPress={() => setSwingPower(Math.max(50, swingPower - 10))}
-                >
-                  <Text style={styles.quickAdjustText}>-</Text>
-                </TouchableOpacity>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>{swingPower}%</Text>
-                  <Text style={styles.dashboardLabel}>
-                    {Math.round(CLUB_DATA[selectedClub].typicalDistance * (swingPower / 100))}yd
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.quickAdjustButton}
-                  onPress={() => setSwingPower(Math.min(100, swingPower + 10))}
-                >
-                  <Text style={styles.quickAdjustText}>+</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.dashboardItem}>
-                <TouchableOpacity
-                  style={styles.quickAdjustButton}
-                  onPress={() => setFaceAngle(Math.max(-10, faceAngle - 2))}
-                >
-                  <Text style={styles.quickAdjustText}>←</Text>
-                </TouchableOpacity>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>
-                    {faceAngle > 0
-                      ? `→${faceAngle}°`
-                      : faceAngle < 0
-                        ? `←${Math.abs(faceAngle)}°`
-                        : '0°'}
-                  </Text>
-                  <Text style={styles.dashboardLabel}>Face</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.quickAdjustButton}
-                  onPress={() => setFaceAngle(Math.min(10, faceAngle + 2))}
-                >
-                  <Text style={styles.quickAdjustText}>→</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.dashboardItem}>
-                <Text style={styles.dashboardIcon}>
-                  {faceAngle - clubPath > 2 ? '↰' : faceAngle - clubPath < -2 ? '↱' : '→'}
+          {/* Club indicator with quick open selection */}
+          {gameMode === 'swing' && (
+            <TouchableOpacity
+              style={styles.dashboardItem}
+              onPress={() => setShowClubModal(true)}
+            >
+              <Text style={styles.dashboardIcon}>🏌️</Text>
+              <View style={styles.dashboardTextContainer}>
+                <Text style={[styles.dashboardValue, { color: CLUB_DATA[selectedClub].color }]}>
+                  {CLUB_DATA[selectedClub].shortName}
                 </Text>
-                <View style={styles.dashboardTextContainer}>
-                  <Text style={styles.dashboardValue}>
-                    {faceAngle - clubPath > 2
-                      ? 'Fade'
-                      : faceAngle - clubPath < -2
-                        ? 'Draw'
-                        : 'Straight'}
-                  </Text>
-                  <Text style={styles.dashboardLabel}>Shape</Text>
-                </View>
+                <Text style={styles.dashboardLabel}>Club</Text>
               </View>
-            </>
+            </TouchableOpacity>
           )}
+
+          <View style={styles.dashboardItem}>
+            <Text style={styles.dashboardIcon}>🎯</Text>
+            <View style={styles.dashboardTextContainer}>
+              <Text style={styles.dashboardValue}>
+                {swingChallengeProgress?.remainingYards != null
+                  ? `${Math.round(swingChallengeProgress.remainingYards)} yd`
+                  : holeDistance < 1
+                    ? `${(holeDistance * 12).toFixed(0)}"`
+                    : `${holeDistance.toFixed(1)} ft`}
+              </Text>
+              <Text style={styles.dashboardLabel}>To Pin</Text>
+            </View>
+          </View>
         </View>
 
         {/* Stats Display */}
